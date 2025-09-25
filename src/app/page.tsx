@@ -27,8 +27,8 @@ export default function Home() {
               Everything you need to run releases, teams, and revenue in one view.
             </h2>
             <p className="mt-6 text-lg text-slate-300">
-              Review this morning's highlights, prioritize what needs your attention, and launch
-              straight into the dashboard when you're ready to make decisions.
+              Review this morning&#39;s highlights, prioritize what needs your attention, and launch
+              straight into the dashboard when you&#39;re ready to make decisions.
             </p>
             <div className="mt-10 flex flex-wrap gap-4 sm:gap-6">
               <a
@@ -73,3 +73,4 @@ export default function Home() {
     </div>
   );
 }
+
