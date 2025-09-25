@@ -1,0 +1,4 @@
+{
+  "codex.sandboxMode": "workspace-write",
+  "codex.approvalPolicy": "on-request"
+}
