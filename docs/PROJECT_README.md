@@ -7,7 +7,6 @@ A modern, fully-featured admin dashboard for the Pacebeats music recommendation 
 ## ✨ Features
 
 ### 🔐 Authentication
-
 - **Login Page** with form validation, animations, and modern design
 - Email and password authentication
 - Remember me functionality
@@ -16,7 +15,6 @@ A modern, fully-featured admin dashboard for the Pacebeats music recommendation 
 ### 📊 Dashboard Pages
 
 #### 1. **Dashboard Home**
-
 - Real-time statistics cards with animations
 - Total users, sessions completed, popular genres, active sessions
 - Recent activity feed with timestamps
@@ -24,7 +22,6 @@ A modern, fully-featured admin dashboard for the Pacebeats music recommendation 
 - System status indicators
 
 #### 2. **User Management**
-
 - Advanced data table with sorting and filtering
 - Search by name or email
 - Filter by active/inactive status
@@ -33,7 +30,6 @@ A modern, fully-featured admin dashboard for the Pacebeats music recommendation 
 - Delete confirmation dialogs
 
 #### 3. **Sessions Management**
-
 - Real-time session monitoring
 - Live status indicators (Active with pulse animation)
 - Date range filtering
@@ -42,7 +38,6 @@ A modern, fully-featured admin dashboard for the Pacebeats music recommendation 
 - Sortable columns
 
 #### 4. **Music Library**
-
 - **Grid View**: Beautiful music cards with hover effects
 - **Table View**: Sortable data table
 - Multi-filter support (Genre, Mood, BPM)
@@ -51,7 +46,6 @@ A modern, fully-featured admin dashboard for the Pacebeats music recommendation 
 - Play count tracking
 
 #### 5. **Analytics Dashboard**
-
 - **Bar Chart**: Top 10 most popular songs
 - **Pie Chart**: Mood distribution
 - **Line Chart**: BPM distribution
@@ -67,7 +61,6 @@ A modern, fully-featured admin dashboard for the Pacebeats music recommendation 
 The dashboard uses a modern OKLCH color system defined in `globals.css`:
 
 **Primary Blues (Actions & CTAs)**
-
 ```css
 var(--primary-60)  /* Main buttons, links */
 var(--primary-70)  /* Hover states */
@@ -75,7 +68,6 @@ var(--primary-80)  /* Active states */
 ```
 
 **Grays (Backgrounds & Text)**
-
 ```css
 var(--gray-10)     /* Card backgrounds */
 var(--gray-20)     /* Borders, dividers */
@@ -85,7 +77,6 @@ var(--gray-90)     /* Headings */
 ```
 
 **Usage Example**
-
 ```tsx
 <div className="bg-[var(--gray-10)] border-[var(--gray-20)]">
   <h1 className="text-[var(--gray-90)]">Title</h1>
@@ -98,36 +89,31 @@ var(--gray-90)     /* Headings */
 ## 🚀 Getting Started
 
 ### Prerequisites
-
 - Node.js 20+
 - npm or yarn
 
 ### Installation
 
 1. **Clone the repository**
-
 ```bash
 git clone <repository-url>
 cd pacebeats-admin
 ```
 
 2. **Install dependencies**
-
 ```bash
 npm install
 ```
 
 3. **Run the development server**
-
 ```bash
 npm run dev
 ```
 
 4. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
+Navigate to [http://localhost:3000](http://localhost:3000)
 
 ### Login Credentials
-
 - Email: `admin@pacebeats.com`
 - Password: Any password (6+ characters)
 
@@ -179,7 +165,6 @@ pacebeats-admin/
 ## 📊 Mock Data
 
 The application includes comprehensive mock data:
-
 - **30+ Users** with registration dates, activity levels, and status
 - **200+ Sessions** with real-time status indicators
 - **100+ Music Tracks** across multiple genres and moods
@@ -217,21 +202,18 @@ npm run type-check  # Run TypeScript checks
 ## 🎯 Key Features Implementation
 
 ### Responsive Design
-
 - Mobile-first approach
 - Collapsible sidebar on mobile (Sheet component)
 - Responsive grids and tables
 - Touch-friendly interactions
 
 ### Performance
-
 - Server-side rendering where appropriate
 - Client components only when needed
 - Optimized images with Next.js Image
 - Lazy loading and code splitting
 
 ### Accessibility
-
 - Semantic HTML
 - ARIA labels
 - Keyboard navigation
@@ -239,7 +221,6 @@ npm run type-check  # Run TypeScript checks
 - Screen reader support
 
 ### Type Safety
-
 - Full TypeScript coverage
 - Proper type definitions for all data
 - Type-safe component props
@@ -248,9 +229,7 @@ npm run type-check  # Run TypeScript checks
 ## 🎨 Customization
 
 ### Colors
-
 Modify OKLCH colors in `src/app/globals.css`:
-
 ```css
 :root {
   --primary-60: 0.55 0.19 252;
@@ -260,32 +239,26 @@ Modify OKLCH colors in `src/app/globals.css`:
 ```
 
 ### Mock Data
-
 Edit `src/lib/mock-data.ts` to add or modify:
-
 - Users
 - Sessions
 - Music tracks
 - Analytics data
 
 ### Components
-
 All components are in `src/components/`:
-
 - Dashboard components in `/dashboard`
 - UI primitives in `/ui` (shadcn)
 
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
-
 ```bash
 # Deploy to Vercel
 vercel
 ```
 
 ### Docker
-
 ```bash
 # Build Docker image
 docker build -t pacebeats-admin .
