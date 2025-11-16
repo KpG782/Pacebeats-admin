@@ -36,7 +36,7 @@ const navItems = [
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
 ];
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header(_props: HeaderProps) {
   const pathname = usePathname();
   const [darkMode, setDarkMode] = useState(false);
 

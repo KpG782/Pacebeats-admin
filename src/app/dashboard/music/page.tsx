@@ -23,7 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -31,14 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Music as MusicIcon,
-  Upload,
-  Search,
-  Grid3x3,
-  List,
-  ArrowUpDown,
-} from "lucide-react";
+import { Upload, Search, Grid3x3, List, ArrowUpDown } from "lucide-react";
 import { mockMusic, genres, moods, type Music } from "@/lib/mock-data";
 import { MusicCard } from "@/components/dashboard/music-card";
 

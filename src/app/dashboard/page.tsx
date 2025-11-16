@@ -76,7 +76,7 @@ export default function DashboardPage() {
           Dashboard Overview
         </h1>
         <p className="text-muted-foreground">
-          Welcome back! Here's what's happening with your music platform today.
+          Welcome back! Here&apos;s what&apos;s happening with your music platform today.
         </p>
       </motion.div>
 
