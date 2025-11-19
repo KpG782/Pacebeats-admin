@@ -1,5 +1,8 @@
 // Complete Music types matching admin.md schema and Supabase tables
 
+// Mood type - only 6 allowed moods
+export type MoodType = "happy" | "sad" | "chill" | "hype" | "focus" | "angry";
+
 export interface MusicTrack {
   // Core
   id: string;
@@ -15,7 +18,7 @@ export interface MusicTrack {
   // Categorization
   genre: string;
   sub_genre?: string;
-  mood: string;
+  mood: MoodType;
   energy_level: number; // 1-10
 
   // Running Metrics
@@ -65,7 +68,7 @@ export interface Genre {
 
 export interface Mood {
   id: string;
-  name: string;
+  name: MoodType;
   description?: string;
   energy_range: [number, number]; // min-max energy level
   track_count: number;
@@ -87,7 +90,7 @@ export interface MusicStats {
 export interface MusicFilters {
   search?: string;
   genre?: string;
-  mood?: string;
+  mood?: MoodType;
   bpm_min?: number;
   bpm_max?: number;
   energy_min?: number;
@@ -107,7 +110,7 @@ export interface MusicTrackFormData {
   preview_url?: string;
   genre: string;
   sub_genre?: string;
-  mood: string;
+  mood: MoodType;
   energy_level: number;
   bpm: number;
   optimal_pace_min?: number;
