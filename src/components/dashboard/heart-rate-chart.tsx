@@ -65,7 +65,7 @@ export function HeartRateChart({
           {/* Simple visualization placeholder */}
           <div className="bg-muted rounded-lg h-[200px] flex items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 flex items-end justify-around p-4 gap-1">
-              {heartRates.map((hr, idx) => {
+              {heartRates.map((hr) => {
                 const height = ((hr.heart_rate - minHR) / range) * 100;
                 return (
                   <div

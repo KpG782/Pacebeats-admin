@@ -57,7 +57,7 @@ export interface UserActivity {
     | "session_start"
     | "session_complete"
     | "settings_change";
-  event_data?: any;
+  event_data?: Record<string, unknown>;
   created_at: string;
 }
 

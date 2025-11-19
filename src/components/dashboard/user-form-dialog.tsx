@@ -189,7 +189,7 @@ export function UserFormDialog({
               <Label htmlFor="status">Status</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value: any) =>
+                onValueChange={(value: "active" | "inactive" | "suspended" | "deleted") =>
                   setFormData({ ...formData, status: value })
                 }
               >
@@ -216,7 +216,7 @@ export function UserFormDialog({
                 <Label htmlFor="gender">Gender</Label>
                 <Select
                   value={formData.gender}
-                  onValueChange={(value: any) =>
+                  onValueChange={(value: "male" | "female" | "other" | "prefer_not_to_say") =>
                     setFormData({ ...formData, gender: value })
                   }
                 >
@@ -337,7 +337,7 @@ export function UserFormDialog({
                 <Label htmlFor="running_experience">Experience Level</Label>
                 <Select
                   value={formData.running_experience}
-                  onValueChange={(value: any) =>
+                  onValueChange={(value: "beginner" | "intermediate" | "advanced") =>
                     setFormData({ ...formData, running_experience: value })
                   }
                 >

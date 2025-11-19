@@ -88,7 +88,7 @@ export function Sidebar() {
             Check our documentation or contact support
           </p>
           <Link
-            href="#"
+            href="/dashboard/help"
             className="text-xs text-primary hover:text-primary/80 font-medium"
           >
             Learn More →

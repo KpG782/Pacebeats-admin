@@ -5,7 +5,6 @@ import {
   SessionHeartRate,
   SessionMusic,
 } from "./types/session";
-import { enhancedMockUsers } from "./enhanced-mock-data";
 
 // Generate comprehensive running sessions
 export const enhancedMockSessions: RunningSession[] = [

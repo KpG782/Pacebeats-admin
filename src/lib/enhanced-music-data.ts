@@ -1,7 +1,5 @@
 // Enhanced Music Mock Data with complete schema
 import { MusicTrack, ListeningEvent, Genre, Mood } from "./types/music";
-import { enhancedMockUsers } from "./enhanced-mock-data";
-import { enhancedMockSessions } from "./enhanced-session-data";
 
 // Comprehensive Genre List
 export const enhancedGenres: Genre[] = [

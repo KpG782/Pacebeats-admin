@@ -12,9 +12,19 @@ import {
   TrendingUp,
   ArrowRight,
   Clock,
+  PlayCircle,
+  Headphones,
+  Radio,
+  BarChart3,
 } from "lucide-react";
-import { getDashboardStats, mockActivities } from "@/lib/mock-data";
+import { enhancedAnalyticsData } from "@/lib/enhanced-analytics-data";
+import {
+  enhancedMusicTracks,
+} from "@/lib/enhanced-music-data";
+import { enhancedMockUsers } from "@/lib/enhanced-mock-data";
+import { enhancedMockSessions } from "@/lib/enhanced-session-data";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -32,7 +42,45 @@ const itemVariants = {
 };
 
 export default function DashboardPage() {
-  const stats = getDashboardStats();
+  const stats = enhancedAnalyticsData.dashboardStats;
+  const topTracks = enhancedAnalyticsData.songPopularity.slice(0, 5);
+  const topGenres = enhancedAnalyticsData.genreDistribution
+    .sort((a, b) => b.avgPlays - a.avgPlays)
+    .slice(0, 3);
+  const topMoods = enhancedAnalyticsData.moodDistribution
+    .sort((a, b) => b.tracks - a.tracks)
+    .slice(0, 3);
+
+  // Get recent activity from tracks, users, sessions
+  const recentActivity = [
+    ...enhancedMusicTracks.slice(0, 3).map((track) => ({
+      id: track.id,
+      type: "music_added",
+      message: `New track added: ${track.track_name} by ${track.artist_name}`,
+      timestamp: track.added_at,
+    })),
+    ...enhancedMockUsers.slice(0, 2).map((user) => ({
+      id: user.id,
+      type: user.status === "active" ? "user_registered" : "user_inactive",
+      message: `User ${user.username} ${
+        user.status === "active" ? "is active" : "went inactive"
+      }`,
+      timestamp: user.created_at,
+    })),
+    ...enhancedMockSessions.slice(0, 2).map((session) => ({
+      id: session.id,
+      type: "session_completed",
+      message: `Session completed: ${(
+        session.total_distance_meters / 1000
+      ).toFixed(1)}km in ${Math.round(session.duration_seconds / 60)} min`,
+      timestamp: session.started_at,
+    })),
+  ]
+    .sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )
+    .slice(0, 6);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -94,35 +142,98 @@ export default function DashboardPage() {
           subtitle={`${stats.activeUsers} active users`}
           icon={Users}
           trend="up"
-          trendValue="+12% from last month"
+          trendValue="+12.5% from last month"
           delay={0}
         />
         <StatsCard
-          title="Sessions Completed"
-          value={stats.completedSessions}
+          title="Total Sessions"
+          value={stats.totalSessions}
           subtitle={`${stats.activeSessions} currently active`}
           icon={Activity}
           trend="up"
-          trendValue="+8% from last week"
+          trendValue="+8.3% from last week"
           delay={0.1}
         />
         <StatsCard
-          title="Most Popular Genre"
-          value={stats.mostPopularGenre}
-          subtitle={`${stats.totalTracks} total tracks`}
+          title="Music Library"
+          value={stats.totalTracks}
+          subtitle={`${stats.totalPlays.toLocaleString()} total plays`}
           icon={Music}
-          trend="neutral"
+          trend="up"
+          trendValue={`${topGenres[0]?.name || "Electronic"} is trending`}
           delay={0.2}
         />
         <StatsCard
-          title="Active Sessions"
-          value={stats.activeSessions}
-          subtitle="Real-time active users"
+          title="Avg Session Duration"
+          value={`${Math.round(stats.avgSessionDuration / 60)} min`}
+          subtitle={`${stats.avgSongsPerSession.toFixed(1)} songs/session`}
           icon={TrendingUp}
           trend="up"
-          trendValue="+3 from an hour ago"
+          trendValue={`${stats.avgCompletionRate.toFixed(0)}% completion rate`}
           delay={0.3}
         />
+      </motion.div>
+
+      {/* Quick Stats Overview */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-1 md:grid-cols-3 gap-6"
+      >
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/30 border-blue-200 dark:border-blue-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-500 rounded-lg">
+                <Headphones className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                  {topGenres[0]?.tracks || 0}
+                </p>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  {topGenres[0]?.name || "Electronic"} Tracks
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/50 dark:to-purple-900/30 border-purple-200 dark:border-purple-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-purple-500 rounded-lg">
+                <Radio className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                  {topMoods[0]?.tracks || 0}
+                </p>
+                <p className="text-sm text-purple-700 dark:text-purple-300">
+                  {topMoods[0]?.name || "happy"} mood tracks
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/50 dark:to-green-900/30 border-green-200 dark:border-green-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-green-500 rounded-lg">
+                <TrendingUp className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                  {stats.userRetentionRate.toFixed(1)}%
+                </p>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  User Retention Rate
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -139,18 +250,20 @@ export default function DashboardPage() {
               <CardTitle className="text-gray-900 dark:text-white">
                 Recent Activity
               </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-primary hover:text-primary/80"
-              >
-                View All
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <Link href="/dashboard/analytics">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-primary hover:text-primary/80"
+                >
+                  View All
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {mockActivities.map((activity, index) => (
+                {recentActivity.map((activity, index) => (
                   <motion.div
                     key={activity.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -196,6 +309,7 @@ export default function DashboardPage() {
           initial="hidden"
           animate="show"
           transition={{ delay: 0.5 }}
+          className="space-y-6"
         >
           <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardHeader>
@@ -204,27 +318,70 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button variant="default" className="w-full justify-start">
-                <Users className="mr-2 h-4 w-4" />
-                Add New User
-              </Button>
-              <Button variant="secondary" className="w-full justify-start">
-                <Music className="mr-2 h-4 w-4" />
-                Upload Music
-              </Button>
-              <Button variant="secondary" className="w-full justify-start">
-                <Activity className="mr-2 h-4 w-4" />
-                View Sessions
-              </Button>
-              <Button variant="secondary" className="w-full justify-start">
-                <TrendingUp className="mr-2 h-4 w-4" />
-                Analytics Report
-              </Button>
+              <Link href="/dashboard/users">
+                <Button variant="default" className="w-full justify-start">
+                  <Users className="mr-2 h-4 w-4" />
+                  Manage Users
+                </Button>
+              </Link>
+              <Link href="/dashboard/music">
+                <Button variant="secondary" className="w-full justify-start">
+                  <Music className="mr-2 h-4 w-4" />
+                  Music Library
+                </Button>
+              </Link>
+              <Link href="/dashboard/sessions">
+                <Button variant="secondary" className="w-full justify-start">
+                  <Activity className="mr-2 h-4 w-4" />
+                  View Sessions
+                </Button>
+              </Link>
+              <Link href="/dashboard/analytics">
+                <Button variant="secondary" className="w-full justify-start">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Analytics Report
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* Top Tracks */}
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
+                <PlayCircle className="h-5 w-5 text-primary" />
+                Top Tracks
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {topTracks.map((track, index) => (
+                <div
+                  key={track.id}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-gray-500 dark:text-gray-400 font-medium w-4">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-gray-900 dark:text-white font-medium truncate">
+                        {track.name}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {track.artist}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="ml-2">
+                    {track.plays.toLocaleString()}
+                  </Badge>
+                </div>
+              ))}
             </CardContent>
           </Card>
 
           {/* System Status */}
-          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm mt-6">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardHeader>
               <CardTitle className="text-gray-900 dark:text-white">
                 System Status
@@ -249,7 +406,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Storage
+                  Music Service
                 </span>
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                   Operational

@@ -77,11 +77,63 @@ export default function LoginPage() {
 
     setIsLoading(true);
 
-    // Simulate API call
+    // TODO: Replace with actual API call
+    // Example:
+    // try {
+    //   const response = await fetch('/api/auth/login', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ email, password, rememberMe })
+    //   });
+    //
+    //   if (!response.ok) {
+    //     throw new Error('Invalid credentials');
+    //   }
+    //
+    //   const data = await response.json();
+    //   localStorage.setItem('authToken', data.token);
+    //   localStorage.setItem('adminUser', JSON.stringify(data.user));
+    //   router.push('/dashboard');
+    // } catch (error) {
+    //   setErrors({ ...errors, password: 'Invalid email or password' });
+    //   setIsLoading(false);
+    // }
+
+    // Simulate API call - Remove this in production
     setTimeout(() => {
+      // Mock success - store token for demo
+      localStorage.setItem("authToken", "mock_token_" + Date.now());
+      localStorage.setItem(
+        "adminUser",
+        JSON.stringify({
+          id: "ADM001",
+          name: "Admin User",
+          email: email,
+          role: "super_admin",
+        })
+      );
+
       setIsLoading(false);
       router.push("/dashboard");
     }, 1500);
+  };
+
+  // Handle forgot password - Ready for backend integration
+  const handleForgotPassword = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    // TODO: Navigate to forgot password page or show modal
+    // router.push('/forgot-password');
+    alert(
+      "Forgot password functionality will be implemented with backend integration"
+    );
+  };
+
+  // Handle contact support - Ready for backend integration
+  const handleContactSupport = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    // TODO: Open support modal or navigate to support page
+    // router.push('/support');
+    handleAutoFill(e); // For demo purposes, using autofill
   };
 
   return (
@@ -267,6 +319,7 @@ export default function LoginPage() {
                 </div>
                 <a
                   href="#"
+                  onClick={handleForgotPassword}
                   className="text-sm text-primary hover:text-primary/80 transition-colors"
                 >
                   Forgot password?
@@ -301,7 +354,7 @@ export default function LoginPage() {
                 Need help?{" "}
                 <a
                   href="#"
-                  onClick={handleAutoFill}
+                  onClick={handleContactSupport}
                   className="text-primary hover:text-primary/80 transition-colors"
                 >
                   Contact Support

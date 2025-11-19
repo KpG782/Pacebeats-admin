@@ -1,6 +1,4 @@
 "use client";
-
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -13,7 +11,6 @@ import {
   Flame,
   Clock,
   TrendingUp,
-  User as UserIcon,
   Edit,
   Ban,
   Trash2,
@@ -61,7 +58,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             User Not Found
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            The user you're looking for doesn't exist.
+            The user you&apos;re looking for doesn&apos;t exist.
           </p>
           <Button onClick={() => router.push("/dashboard/users")}>
             Back to Users

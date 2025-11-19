@@ -13,13 +13,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, TrendingUp, TrendingDown, Users, Music, Activity, BarChart3, Clock, Target, Zap } from "lucide-react";
+import {
+  Download,
+  TrendingUp,
+  TrendingDown,
+  Users,
+  Music,
+  Activity,
+  Clock,
+} from "lucide-react";
 import {
   BarChart,
   Bar,
   PieChart,
   Pie,
-  LineChart,
   Line,
   AreaChart,
   Area,
@@ -35,7 +42,6 @@ import {
 import {
   enhancedAnalyticsData,
   getTopGenres,
-  getTopMoods,
   getRecommendationTrend,
 } from "@/lib/enhanced-analytics-data";
 import { useToast } from "@/components/ui/use-toast";
@@ -57,11 +63,11 @@ export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const { toast } = useToast();
 
-  const { 
-    dashboardStats, 
-    songPopularity, 
-    genreDistribution, 
-    moodDistribution, 
+  const {
+    dashboardStats,
+    songPopularity,
+    genreDistribution,
+    moodDistribution,
     bpmDistribution,
     userActivityTrend,
     sessionMetrics,
@@ -75,7 +81,7 @@ export default function AnalyticsPage() {
       title: "Export Started",
       description: "Analytics data is being exported to CSV...",
     });
-    
+
     // Mock export logic
     setTimeout(() => {
       toast({
@@ -199,7 +205,10 @@ export default function AnalyticsPage() {
                       textAnchor="end"
                       height={100}
                     />
-                    <YAxis tick={{ fill: "currentColor" }} className="fill-gray-600 dark:fill-gray-400" />
+                    <YAxis
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
+                    />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "hsl(var(--background))",
@@ -236,7 +245,7 @@ export default function AnalyticsPage() {
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={genreDistribution as any[]}
+                        data={genreDistribution as never[]}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -280,7 +289,7 @@ export default function AnalyticsPage() {
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={moodDistribution as any[]}
+                        data={moodDistribution as never[]}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -322,10 +331,21 @@ export default function AnalyticsPage() {
                   <CardTitle className="text-gray-900 dark:text-white">
                     Recommendation Accuracy Over Time
                   </CardTitle>
-                  <div className={`flex items-center gap-2 ${recommendationTrend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {recommendationTrend >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+                  <div
+                    className={`flex items-center gap-2 ${
+                      recommendationTrend >= 0
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {recommendationTrend >= 0 ? (
+                      <TrendingUp className="h-5 w-5" />
+                    ) : (
+                      <TrendingDown className="h-5 w-5" />
+                    )}
                     <span className="text-sm font-semibold">
-                      {recommendationTrend >= 0 ? '+' : ''}{recommendationTrend.toFixed(1)}% this year
+                      {recommendationTrend >= 0 ? "+" : ""}
+                      {recommendationTrend.toFixed(1)}% this year
                     </span>
                   </div>
                 </div>
@@ -425,16 +445,16 @@ export default function AnalyticsPage() {
                       tick={{ fill: "currentColor" }}
                       className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="left"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="right"
                       orientation="right"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
                     <Tooltip
                       contentStyle={{
@@ -490,16 +510,16 @@ export default function AnalyticsPage() {
                       tick={{ fill: "currentColor" }}
                       className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="left"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="right"
                       orientation="right"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
                     <Tooltip
                       contentStyle={{
@@ -598,18 +618,20 @@ export default function AnalyticsPage() {
                       dataKey="date"
                       tick={{ fill: "currentColor" }}
                       className="fill-gray-600 dark:fill-gray-400"
-                      tickFormatter={(date) => new Date(date).getDate().toString()}
+                      tickFormatter={(date) =>
+                        new Date(date).getDate().toString()
+                      }
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="left"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="right"
                       orientation="right"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
                     <Tooltip
                       contentStyle={{
@@ -667,7 +689,10 @@ export default function AnalyticsPage() {
                       tick={{ fill: "currentColor" }}
                       className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis tick={{ fill: "currentColor" }} className="fill-gray-600 dark:fill-gray-400" />
+                    <YAxis
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
+                    />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "hsl(var(--background))",
@@ -721,16 +746,16 @@ export default function AnalyticsPage() {
                       tick={{ fill: "currentColor" }}
                       className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="left"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
-                    <YAxis 
+                    <YAxis
                       yAxisId="right"
                       orientation="right"
-                      tick={{ fill: "currentColor" }} 
-                      className="fill-gray-600 dark:fill-gray-400" 
+                      tick={{ fill: "currentColor" }}
+                      className="fill-gray-600 dark:fill-gray-400"
                     />
                     <Tooltip
                       contentStyle={{
@@ -774,7 +799,9 @@ export default function AnalyticsPage() {
         <Card className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0">
           <CardContent className="p-6">
             <p className="text-sm opacity-90 mb-2">Avg. Session Length</p>
-            <p className="text-3xl font-bold">{Math.round(dashboardStats.avgSessionDuration / 60)} min</p>
+            <p className="text-3xl font-bold">
+              {Math.round(dashboardStats.avgSessionDuration / 60)} min
+            </p>
             <p className="text-xs opacity-75 mt-2">↑ 8% from last month</p>
           </CardContent>
         </Card>
@@ -782,7 +809,9 @@ export default function AnalyticsPage() {
         <Card className="bg-gradient-to-br from-[oklch(0.65_0.15_200)] to-[oklch(0.60_0.16_220)] text-white border-0">
           <CardContent className="p-6">
             <p className="text-sm opacity-90 mb-2">User Retention</p>
-            <p className="text-3xl font-bold">{dashboardStats.userRetentionRate.toFixed(1)}%</p>
+            <p className="text-3xl font-bold">
+              {dashboardStats.userRetentionRate.toFixed(1)}%
+            </p>
             <p className="text-xs opacity-75 mt-2">↑ 3% from last month</p>
           </CardContent>
         </Card>
@@ -790,7 +819,9 @@ export default function AnalyticsPage() {
         <Card className="bg-gradient-to-br from-[oklch(0.70_0.12_180)] to-[oklch(0.65_0.15_200)] text-white border-0">
           <CardContent className="p-6">
             <p className="text-sm opacity-90 mb-2">Avg. Songs per Session</p>
-            <p className="text-3xl font-bold">{dashboardStats.avgSongsPerSession.toFixed(1)}</p>
+            <p className="text-3xl font-bold">
+              {dashboardStats.avgSongsPerSession.toFixed(1)}
+            </p>
             <p className="text-xs opacity-75 mt-2">↑ 5% from last month</p>
           </CardContent>
         </Card>
@@ -798,7 +829,9 @@ export default function AnalyticsPage() {
         <Card className="bg-gradient-to-br from-[oklch(0.60_0.16_220)] to-[oklch(0.55_0.18_250)] text-white border-0">
           <CardContent className="p-6">
             <p className="text-sm opacity-90 mb-2">User Satisfaction</p>
-            <p className="text-3xl font-bold">{dashboardStats.userSatisfaction.toFixed(1)}/5</p>
+            <p className="text-3xl font-bold">
+              {dashboardStats.userSatisfaction.toFixed(1)}/5
+            </p>
             <p className="text-xs opacity-75 mt-2">↑ 0.2 from last month</p>
           </CardContent>
         </Card>

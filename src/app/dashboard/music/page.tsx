@@ -11,7 +11,6 @@ import {
   useReactTable,
   type ColumnDef,
   type SortingState,
-  type ColumnFiltersState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -33,29 +32,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Upload,
   Search,
   Grid3x3,
   List,
   ArrowUpDown,
   Music,
-  MoreVertical,
-  Eye,
-  Trash2,
   Download,
-  Filter,
-  Zap,
   TrendingUp,
-  Users,
   PlayCircle,
   BarChart3,
-  MoreHorizontal,
 } from "lucide-react";
 import {
   enhancedMusicTracks,
@@ -72,8 +58,6 @@ export default function MusicPage() {
   const { toast } = useToast();
   const [view, setView] = useState<"grid" | "table">("grid");
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [genreFilter, setGenreFilter] = useState<string>("all");
   const [moodFilter, setMoodFilter] = useState<string>("all");
@@ -119,14 +103,6 @@ export default function MusicPage() {
 
   const handleViewDetails = (trackId: string) => {
     router.push(`/dashboard/music/${trackId}`);
-  };
-
-  const handleDeleteTrack = (trackId: string, trackName: string) => {
-    toast({
-      title: "Track Deleted",
-      description: `"${trackName}" has been removed from the library.`,
-      variant: "default",
-    });
   };
 
   const handleExportCSV = () => {
@@ -495,8 +471,8 @@ export default function MusicPage() {
             layout
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
           >
-            {filteredMusic.map((track, index) => (
-              <MusicCard key={track.id} track={track} index={index} />
+            {filteredMusic.map((track, idx) => (
+              <MusicCard key={track.id} track={track} index={idx} />
             ))}
           </motion.div>
         ) : (
@@ -529,7 +505,7 @@ export default function MusicPage() {
                   </TableHeader>
                   <TableBody>
                     {table.getRowModel().rows?.length ? (
-                      table.getRowModel().rows.map((row, index) => (
+                      table.getRowModel().rows.map((row) => (
                         <TableRow
                           key={row.id}
                           className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
