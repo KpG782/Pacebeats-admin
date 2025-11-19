@@ -59,7 +59,7 @@ export default function MusicPage() {
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-muted/50"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             Title
             <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -68,10 +68,10 @@ export default function MusicPage() {
       },
       cell: ({ row }) => (
         <div>
-          <div className="font-medium text-foreground">
+          <div className="font-medium text-gray-900 dark:text-white">
             {row.getValue("title")}
           </div>
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             {row.original.artist}
           </div>
         </div>
@@ -81,10 +81,7 @@ export default function MusicPage() {
       accessorKey: "genre",
       header: "Genre",
       cell: ({ row }) => (
-        <Badge
-          variant="secondary"
-          className="bg-[var(--accent-subtle)] text-[var(--primary-70)]"
-        >
+        <Badge variant="secondary">
           {row.getValue("genre")}
         </Badge>
       ),
@@ -93,7 +90,7 @@ export default function MusicPage() {
       accessorKey: "mood",
       header: "Mood",
       cell: ({ row }) => (
-        <Badge variant="outline" className="border-input">
+        <Badge variant="outline">
           {row.getValue("mood")}
         </Badge>
       ),
@@ -105,7 +102,7 @@ export default function MusicPage() {
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-muted/50"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             BPM
             <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -126,7 +123,7 @@ export default function MusicPage() {
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-muted/50"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             Plays
             <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -163,10 +160,10 @@ export default function MusicPage() {
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Music Library
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-gray-700 dark:text-gray-300">
             Manage your music collection ({filteredMusic.length} tracks)
           </p>
         </div>
@@ -182,23 +179,23 @@ export default function MusicPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
       >
-        <Card className="bg-card border shadow-sm">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-col lg:flex-row gap-4">
               {/* Search */}
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <Input
                   placeholder="Search by title or artist..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 border-input focus-visible:border-ring text-foreground"
+                  className="pl-9 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 />
               </div>
 
               {/* Genre Filter */}
               <Select value={genreFilter} onValueChange={setGenreFilter}>
-                <SelectTrigger className="w-full lg:w-48 border-input">
+                <SelectTrigger className="w-full lg:w-48">
                   <SelectValue placeholder="All Genres" />
                 </SelectTrigger>
                 <SelectContent>
@@ -213,7 +210,7 @@ export default function MusicPage() {
 
               {/* Mood Filter */}
               <Select value={moodFilter} onValueChange={setMoodFilter}>
-                <SelectTrigger className="w-full lg:w-48 border-input">
+                <SelectTrigger className="w-full lg:w-48">
                   <SelectValue placeholder="All Moods" />
                 </SelectTrigger>
                 <SelectContent>
@@ -232,11 +229,6 @@ export default function MusicPage() {
                   variant={view === "grid" ? "default" : "outline"}
                   size="icon"
                   onClick={() => setView("grid")}
-                  className={
-                    view === "grid"
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                  }
                 >
                   <Grid3x3 className="h-4 w-4" />
                 </Button>
@@ -244,11 +236,6 @@ export default function MusicPage() {
                   variant={view === "table" ? "default" : "outline"}
                   size="icon"
                   onClick={() => setView("table")}
-                  className={
-                    view === "table"
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                  }
                 >
                   <List className="h-4 w-4" />
                 </Button>
@@ -276,7 +263,7 @@ export default function MusicPage() {
           </motion.div>
         ) : (
           /* Table View */
-          <Card className="bg-card border shadow-sm">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
@@ -284,12 +271,12 @@ export default function MusicPage() {
                     {table.getHeaderGroups().map((headerGroup) => (
                       <TableRow
                         key={headerGroup.id}
-                        className="bg-muted hover:bg-muted"
+                        className="bg-gray-50 dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800"
                       >
                         {headerGroup.headers.map((header) => (
                           <TableHead
                             key={header.id}
-                            className="text-muted-foreground"
+                            className="text-gray-700 dark:text-gray-300 font-semibold"
                           >
                             {header.isPlaceholder
                               ? null
@@ -307,9 +294,7 @@ export default function MusicPage() {
                       table.getRowModel().rows.map((row, index) => (
                         <TableRow
                           key={row.id}
-                          className={`${
-                            index % 2 === 0 ? "bg-card" : "bg-muted"
-                          } hover:bg-muted/50`}
+                          className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
                         >
                           {row.getVisibleCells().map((cell) => (
                             <TableCell key={cell.id}>
@@ -325,7 +310,7 @@ export default function MusicPage() {
                       <TableRow>
                         <TableCell
                           colSpan={columns.length}
-                          className="h-24 text-center text-muted-foreground"
+                          className="h-24 text-center text-gray-600 dark:text-gray-400"
                         >
                           No tracks found.
                         </TableCell>

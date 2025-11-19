@@ -37,15 +37,15 @@ export default function DashboardPage() {
   const getActivityIcon = (type: string) => {
     switch (type) {
       case "user_registered":
-        return "👋";
+        return Users;
       case "session_completed":
-        return "✅";
+        return Activity;
       case "music_added":
-        return "🎵";
+        return Music;
       case "user_inactive":
-        return "⚠️";
+        return Clock;
       default:
-        return "📌";
+        return Activity;
     }
   };
 
@@ -72,11 +72,12 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <h1 className="text-3xl font-bold text-foreground mb-2">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
           Dashboard Overview
         </h1>
-        <p className="text-muted-foreground">
-          Welcome back! Here&apos;s what&apos;s happening with your music platform today.
+        <p className="text-gray-700 dark:text-gray-300">
+          Welcome back! Here&apos;s what&apos;s happening with your music
+          platform today.
         </p>
       </motion.div>
 
@@ -133,9 +134,11 @@ export default function DashboardPage() {
           transition={{ delay: 0.4 }}
           className="lg:col-span-2"
         >
-          <Card className="bg-card border shadow-sm">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-foreground">Recent Activity</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-white">
+                Recent Activity
+              </CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
@@ -157,20 +160,23 @@ export default function DashboardPage() {
                   >
                     <div className="flex-shrink-0">
                       <div
-                        className={`h-10 w-10 rounded-full flex items-center justify-center text-lg ${getActivityColor(
+                        className={`h-10 w-10 rounded-full flex items-center justify-center ${getActivityColor(
                           activity.type
                         )}`}
                       >
-                        {getActivityIcon(activity.type)}
+                        {(() => {
+                          const Icon = getActivityIcon(activity.type);
+                          return <Icon className="h-5 w-5" />;
+                        })()}
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
                         {activity.message}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
                           {formatDistanceToNow(new Date(activity.timestamp), {
                             addSuffix: true,
                           })}
@@ -191,9 +197,11 @@ export default function DashboardPage() {
           animate="show"
           transition={{ delay: 0.5 }}
         >
-          <Card className="bg-card border shadow-sm">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-foreground">Quick Actions</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-white">
+                Quick Actions
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button variant="default" className="w-full justify-start">
@@ -216,13 +224,15 @@ export default function DashboardPage() {
           </Card>
 
           {/* System Status */}
-          <Card className="bg-card border shadow-sm mt-6">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm mt-6">
             <CardHeader>
-              <CardTitle className="text-foreground">System Status</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-white">
+                System Status
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-gray-700 dark:text-gray-300">
                   API Server
                 </span>
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
@@ -230,19 +240,25 @@ export default function DashboardPage() {
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Database</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Database
+                </span>
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                   Operational
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Storage</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Storage
+                </span>
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                   Operational
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">CDN</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  CDN
+                </span>
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                   Operational
                 </Badge>

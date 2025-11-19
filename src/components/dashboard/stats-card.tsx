@@ -30,19 +30,23 @@ export function StatsCard({
       transition={{ duration: 0.4, delay }}
       whileHover={{ scale: 1.02, y: -4 }}
     >
-      <Card className="bg-card border hover:shadow-lg transition-shadow">
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:shadow-lg transition-shadow">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
             {title}
           </CardTitle>
-          <div className="h-10 w-10 rounded-lg bg-accent flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
             <Icon className="h-5 w-5 text-primary" />
           </div>
         </CardHeader>
         <CardContent>
-          <div className="text-3xl font-bold text-foreground">{value}</div>
+          <div className="text-3xl font-bold text-gray-900 dark:text-white">
+            {value}
+          </div>
           {subtitle && (
-            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+              {subtitle}
+            </p>
           )}
           {trend && trendValue && (
             <div
@@ -51,7 +55,7 @@ export function StatsCard({
                   ? "text-green-600 dark:text-green-400"
                   : trend === "down"
                   ? "text-red-600 dark:text-red-400"
-                  : "text-muted-foreground"
+                  : "text-gray-600 dark:text-gray-400"
               }`}
             >
               {trend === "up" ? "↑" : trend === "down" ? "↓" : "→"} {trendValue}

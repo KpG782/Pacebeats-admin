@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pacebeats | Admin",
+  title: "Pacebeats | Admin Dashboard",
   description: "Pacebeats admin dashboard",
   icons: {
     icon: "/logo.svg",

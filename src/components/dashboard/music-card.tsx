@@ -23,7 +23,7 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
       whileHover={{ y: -4 }}
       className="group"
     >
-      <Card className="bg-card border hover:shadow-lg transition-all overflow-hidden">
+      <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:shadow-lg transition-all overflow-hidden">
         {/* Album Cover Placeholder */}
         <div className="relative h-48 bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
           <MusicIcon className="h-16 w-16 text-primary-foreground opacity-50" />
@@ -51,10 +51,10 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
 
         <CardContent className="p-4">
           {/* Title & Artist */}
-          <h3 className="font-semibold text-foreground truncate">
+          <h3 className="font-semibold text-gray-900 dark:text-white truncate">
             {track.title}
           </h3>
-          <p className="text-sm text-muted-foreground truncate mb-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400 truncate mb-3">
             {track.artist}
           </p>
 
@@ -72,7 +72,7 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
           </div>
 
           {/* Stats */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
             <span>{track.bpm} BPM</span>
             <span>{track.playCount.toLocaleString()} plays</span>
           </div>

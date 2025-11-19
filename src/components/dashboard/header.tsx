@@ -70,7 +70,7 @@ export function Header(_props: HeaderProps) {
   }));
 
   return (
-    <header className="sticky top-0 z-40 bg-background border-b border-border px-4 py-3">
+    <header className="sticky top-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
       {" "}
       <div className="flex items-center justify-between">
         {/* Left Side - Mobile Menu & Breadcrumbs */}
@@ -81,13 +81,13 @@ export function Header(_props: HeaderProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden text-muted-foreground hover:text-foreground"
+                className="lg:hidden text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
-              <div className="p-6 border-b border-border">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-800">
                 <Link href="/dashboard" className="flex items-center gap-3">
                   <Image
                     src="/logo.png"
@@ -97,10 +97,10 @@ export function Header(_props: HeaderProps) {
                     className="h-10 w-10 rounded-xl"
                   />
                   <div>
-                    <h1 className="text-lg font-bold text-foreground">
+                    <h1 className="text-lg font-bold text-gray-900 dark:text-white">
                       Pacebeats
                     </h1>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Admin Dashboard
                     </p>
                   </div>
@@ -115,8 +115,8 @@ export function Header(_props: HeaderProps) {
                       <div
                         className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                           isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                            ? "bg-primary text-white"
+                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                         }`}
                       >
                         <Icon className="h-5 w-5" />
@@ -134,14 +134,14 @@ export function Header(_props: HeaderProps) {
             {breadcrumbs.map((crumb, index) => (
               <div key={crumb.href} className="flex items-center gap-2">
                 {index > 0 && (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <ChevronRight className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 )}
                 <Link
                   href={crumb.href}
                   className={`${
                     index === breadcrumbs.length - 1
-                      ? "text-foreground font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "text-gray-900 dark:text-white font-semibold"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                   } transition-colors`}
                 >
                   {crumb.name}
@@ -154,7 +154,7 @@ export function Header(_props: HeaderProps) {
         <div className="flex items-center gap-3">
           {/* Search - Hidden on mobile */}
           <div className="hidden md:block relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
             <Input placeholder="Search..." className="pl-9 w-64" />
           </div>
 
@@ -163,12 +163,12 @@ export function Header(_props: HeaderProps) {
             variant="ghost"
             size="icon"
             onClick={toggleDarkMode}
-            className="text-muted-foreground hover:text-foreground"
+            className="hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-black dark:hover:text-white"
           >
             {darkMode ? (
-              <Sun className="h-5 w-5" />
+              <Sun className="h-5 w-5 text-white" />
             ) : (
-              <Moon className="h-5 w-5" />
+              <Moon className="h-5 w-5 text-gray-400" />
             )}
           </Button>
 
@@ -178,7 +178,7 @@ export function Header(_props: HeaderProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-muted-foreground hover:text-foreground relative"
+                className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 relative"
               >
                 <Bell className="h-5 w-5" />
                 <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
@@ -189,24 +189,26 @@ export function Header(_props: HeaderProps) {
               <DropdownMenuSeparator />
               <div className="max-h-96 overflow-y-auto">
                 <DropdownMenuItem className="flex flex-col items-start py-3">
-                  <p className="font-medium text-foreground">
+                  <p className="font-medium text-gray-900 dark:text-white">
                     New user registered
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
                     Michelle Carter joined 5 minutes ago
                   </p>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="flex flex-col items-start py-3">
-                  <p className="font-medium text-foreground">
+                  <p className="font-medium text-gray-900 dark:text-white">
                     Session completed
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
                     John Doe finished a 25-minute session
                   </p>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="flex flex-col items-start py-3">
-                  <p className="font-medium text-foreground">New track added</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    New track added
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
                     Midnight Dreams added to library
                   </p>
                 </DropdownMenuItem>
@@ -221,11 +223,14 @@ export function Header(_props: HeaderProps) {
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 px-2">
-                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-semibold">
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2 px-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-sm font-semibold">
                   AD
                 </div>
-                <span className="hidden sm:block text-sm font-medium text-foreground">
+                <span className="hidden sm:block text-sm font-medium text-gray-900 dark:text-white">
                   Admin
                 </span>
               </Button>
@@ -233,8 +238,10 @@ export function Header(_props: HeaderProps) {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
                 <div>
-                  <p className="font-semibold text-foreground">Admin User</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    Admin User
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
                     admin@pacebeats.com
                   </p>
                 </div>
