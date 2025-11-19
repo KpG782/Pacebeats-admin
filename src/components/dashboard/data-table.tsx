@@ -61,7 +61,7 @@ export function DataTable<TData, TValue>({
       {searchKey && (
         <div className="flex items-center gap-2">
           <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
             <Input
               placeholder={searchPlaceholder}
               value={
@@ -70,22 +70,25 @@ export function DataTable<TData, TValue>({
               onChange={(event) =>
                 table.getColumn(searchKey)?.setFilterValue(event.target.value)
               }
-              className="pl-10 border-input focus:border-[var(--primary-60)] text-foreground"
+              className="pl-10"
             />
           </div>
         </div>
       )}
 
       {/* Table */}
-      <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="bg-card hover:bg-white">
+              <TableRow
+                key={headerGroup.id}
+                className="bg-gray-50 dark:bg-gray-800"
+              >
                 {headerGroup.headers.map((header) => (
                   <TableHead
                     key={header.id}
-                    className="text-foreground font-semibold"
+                    className="text-gray-900 dark:text-white font-semibold"
                   >
                     {header.isPlaceholder
                       ? null
@@ -104,9 +107,7 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={`${
-                    index % 2 === 0 ? "bg-white" : "bg-white"
-                  } hover:bg-muted/50 transition-colors`}
+                  className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -124,7 +125,9 @@ export function DataTable<TData, TValue>({
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  <div className="text-muted-foreground">No results found.</div>
+                  <div className="text-gray-600 dark:text-gray-400">
+                    No results found.
+                  </div>
                 </TableCell>
               </TableRow>
             )}
@@ -134,7 +137,7 @@ export function DataTable<TData, TValue>({
 
       {/* Pagination */}
       <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-gray-600 dark:text-gray-400">
           Page {table.getState().pagination.pageIndex + 1} of{" "}
           {table.getPageCount()}
         </div>
@@ -144,7 +147,6 @@ export function DataTable<TData, TValue>({
             size="sm"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-            className="border-input"
           >
             <ChevronLeft className="h-4 w-4 mr-1" />
             Previous
@@ -154,7 +156,6 @@ export function DataTable<TData, TValue>({
             size="sm"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-            className="border-input"
           >
             Next
             <ChevronRight className="h-4 w-4 ml-1" />

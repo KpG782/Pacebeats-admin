@@ -85,7 +85,7 @@ export default function UsersPage() {
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-muted/50"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             ID
             <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -103,7 +103,7 @@ export default function UsersPage() {
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-muted/50"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             Name
             <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -112,10 +112,10 @@ export default function UsersPage() {
       },
       cell: ({ row }) => (
         <div>
-          <div className="font-medium text-foreground">
+          <div className="font-medium text-gray-900 dark:text-white">
             {row.getValue("name")}
           </div>
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             {row.original.email}
           </div>
         </div>
@@ -128,7 +128,7 @@ export default function UsersPage() {
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-muted/50"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             Registration Date
             <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -148,7 +148,7 @@ export default function UsersPage() {
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-muted/50"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             Total Runs
             <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -171,7 +171,7 @@ export default function UsersPage() {
             className={
               status === "active"
                 ? "bg-green-100 text-green-900 border border-green-300 font-semibold dark:bg-green-900/30 dark:text-green-400 dark:border-green-700"
-                : "bg-muted text-foreground border font-semibold"
+                : "bg-gray-200 text-gray-900 border border-gray-400 font-semibold dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600"
             }
           >
             {status}
@@ -187,7 +187,11 @@ export default function UsersPage() {
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="hover:bg-muted/50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -244,10 +248,10 @@ export default function UsersPage() {
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             User Management
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-gray-700 dark:text-gray-300">
             Manage and monitor all registered users
           </p>
         </div>
@@ -263,23 +267,23 @@ export default function UsersPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
       >
-        <Card className="bg-card border shadow-sm">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
               {/* Search */}
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <Input
                   placeholder="Search users by name or email..."
                   value={globalFilter}
                   onChange={(e) => setGlobalFilter(e.target.value)}
-                  className="pl-9 border-input focus-visible:border-ring text-foreground"
+                  className="pl-9 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 />
               </div>
 
               {/* Status Filter */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-48 border-input">
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -307,12 +311,12 @@ export default function UsersPage() {
                   {table.getHeaderGroups().map((headerGroup) => (
                     <TableRow
                       key={headerGroup.id}
-                      className="bg-muted hover:bg-muted"
+                      className="bg-gray-50 dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800"
                     >
                       {headerGroup.headers.map((header) => (
                         <TableHead
                           key={header.id}
-                          className="text-muted-foreground"
+                          className="text-gray-700 dark:text-gray-300 font-semibold"
                         >
                           {header.isPlaceholder
                             ? null
@@ -330,9 +334,11 @@ export default function UsersPage() {
                     table.getRowModel().rows.map((row, index) => (
                       <TableRow
                         key={row.id}
-                        className={`${
-                          index % 2 === 0 ? "bg-card" : "bg-muted"
-                        } hover:bg-muted/50`}
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-800 ${
+                          index % 2 === 0
+                            ? "bg-white dark:bg-gray-900"
+                            : "bg-gray-50 dark:bg-gray-800"
+                        }`}
                       >
                         {row.getVisibleCells().map((cell) => (
                           <TableCell key={cell.id}>
@@ -348,7 +354,7 @@ export default function UsersPage() {
                     <TableRow>
                       <TableCell
                         colSpan={columns.length}
-                        className="h-24 text-center text-muted-foreground"
+                        className="h-24 text-center text-gray-600 dark:text-gray-400"
                       >
                         No users found.
                       </TableCell>
@@ -359,8 +365,8 @@ export default function UsersPage() {
             </div>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between p-4 border-t border">
-              <div className="text-sm text-muted-foreground">
+            <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-800">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 Showing {table.getState().pagination.pageIndex * 10 + 1} to{" "}
                 {Math.min(
                   (table.getState().pagination.pageIndex + 1) * 10,
@@ -370,11 +376,11 @@ export default function UsersPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
                   onClick={() => table.previousPage()}
                   disabled={!table.getCanPreviousPage()}
-                  className="bg-muted hover:bg-muted/80 text-foreground font-semibold disabled:opacity-50"
+                  className="disabled:opacity-50"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   Previous

@@ -52,16 +52,16 @@ export default function AnalyticsPage() {
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Analytics Dashboard
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-gray-700 dark:text-gray-300">
             Insights into your music platform performance
           </p>
         </div>
         <div className="flex gap-2">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-48 border-input">
+            <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -84,9 +84,9 @@ export default function AnalyticsPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
       >
-        <Card className="bg-card border shadow-sm">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-foreground">
+            <CardTitle className="text-gray-900 dark:text-white">
               Top 10 Most Popular Songs
             </CardTitle>
           </CardHeader>
@@ -95,21 +95,24 @@ export default function AnalyticsPage() {
               <BarChart data={mockAnalytics.songPopularity}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="oklch(var(--gray-30))"
+                  stroke="currentColor"
+                  className="stroke-gray-200 dark:stroke-gray-700"
                 />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: "oklch(var(--gray-70))" }}
+                  tick={{ fill: "currentColor" }}
+                  className="fill-gray-600 dark:fill-gray-400"
                   angle={-45}
                   textAnchor="end"
                   height={100}
                 />
-                <YAxis tick={{ fill: "oklch(var(--gray-70))" }} />
+                <YAxis tick={{ fill: "currentColor" }} className="fill-gray-600 dark:fill-gray-400" />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "white",
-                    border: "1px solid oklch(var(--gray-30))",
+                    backgroundColor: "hsl(var(--background))",
+                    border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
+                    color: "hsl(var(--foreground))",
                   }}
                 />
                 <Bar
@@ -130,9 +133,9 @@ export default function AnalyticsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
         >
-          <Card className="bg-card border shadow-sm">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-foreground">
+              <CardTitle className="text-gray-900 dark:text-white">
                 Mood Distribution
               </CardTitle>
             </CardHeader>
@@ -176,9 +179,9 @@ export default function AnalyticsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.3 }}
         >
-          <Card className="bg-card border shadow-sm">
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-foreground">
+              <CardTitle className="text-gray-900 dark:text-white">
                 BPM Distribution
               </CardTitle>
             </CardHeader>
@@ -187,13 +190,15 @@ export default function AnalyticsPage() {
                 <LineChart data={mockAnalytics.bpmDistribution}>
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="oklch(var(--gray-30))"
+                    stroke="currentColor"
+                    className="stroke-gray-200 dark:stroke-gray-700"
                   />
                   <XAxis
                     dataKey="range"
-                    tick={{ fill: "oklch(var(--gray-70))" }}
+                    tick={{ fill: "currentColor" }}
+                    className="fill-gray-600 dark:fill-gray-400"
                   />
-                  <YAxis tick={{ fill: "oklch(var(--gray-70))" }} />
+                  <YAxis tick={{ fill: "currentColor" }} className="fill-gray-600 dark:fill-gray-400" />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "white",
@@ -222,10 +227,10 @@ export default function AnalyticsPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.4 }}
       >
-        <Card className="bg-card border shadow-sm">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-foreground">
+              <CardTitle className="text-gray-900 dark:text-white">
                 Recommendation Accuracy Over Time
               </CardTitle>
               <div className="flex items-center gap-2 text-green-600">
@@ -259,20 +264,24 @@ export default function AnalyticsPage() {
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="oklch(var(--gray-30))"
+                  stroke="currentColor"
+                  className="stroke-gray-200 dark:stroke-gray-700"
                 />
                 <XAxis
                   dataKey="month"
-                  tick={{ fill: "oklch(var(--gray-70))" }}
+                  tick={{ fill: "currentColor" }}
+                  className="fill-gray-600 dark:fill-gray-400"
                 />
                 <YAxis
-                  tick={{ fill: "oklch(var(--gray-70))" }}
+                  tick={{ fill: "currentColor" }}
+                  className="fill-gray-600 dark:fill-gray-400"
                   domain={[70, 100]}
                   label={{
                     value: "Accuracy (%)",
                     angle: -90,
                     position: "insideLeft",
-                    fill: "oklch(var(--gray-70))",
+                    fill: "currentColor",
+                    className: "fill-gray-600 dark:fill-gray-400",
                   }}
                 />
                 <Tooltip

@@ -30,9 +30,9 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden lg:flex lg:flex-col lg:w-64 bg-sidebar border-r border-sidebar-border h-screen sticky top-0">
+    <aside className="hidden lg:flex lg:flex-col lg:w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 h-screen sticky top-0">
       {/* Logo */}
-      <div className="p-6 border-b border-sidebar-border">
+      <div className="p-6 border-b border-gray-200 dark:border-gray-800">
         <Link href="/dashboard" className="flex items-center gap-3">
           <Image
             src="/logo.png"
@@ -42,10 +42,12 @@ export function Sidebar() {
             className="h-10 w-10 rounded-xl"
           />
           <div>
-            <h1 className="text-lg font-bold text-sidebar-foreground">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
               Pacebeats
             </h1>
-            <p className="text-xs text-muted-foreground">Admin Dashboard</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Admin Dashboard
+            </p>
           </div>
         </Link>
       </div>
@@ -64,8 +66,8 @@ export function Sidebar() {
                 transition={{ delay: index * 0.05 }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                   isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    ? "bg-primary text-white shadow-md"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-white"
                 }`}
               >
                 <Icon className="h-5 w-5" />
@@ -77,12 +79,12 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="bg-accent rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-foreground mb-1">
+      <div className="p-4 border-t border-gray-200 dark:border-gray-800">
+        <div className="bg-blue-50 dark:bg-gray-800 border border-blue-100 dark:border-gray-700 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
             Need Help?
           </h3>
-          <p className="text-xs text-muted-foreground mb-3">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
             Check our documentation or contact support
           </p>
           <Link
