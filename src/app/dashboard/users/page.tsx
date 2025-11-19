@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
@@ -60,22 +61,156 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Ban,
+  CheckCircle,
 } from "lucide-react";
-import { mockUsers, type User } from "@/lib/mock-data";
+import { enhancedMockUsers } from "@/lib/enhanced-mock-data";
+import { User, UserFormData } from "@/lib/types/user";
+import { UserFormDialog } from "@/components/dashboard/user-form-dialog";
+import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
 
 export default function UsersPage() {
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const [users, setUsers] = useState<User[]>(enhancedMockUsers);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [showUserForm, setShowUserForm] = useState(false);
 
   // Filter users by status
   const filteredUsers = useMemo(() => {
-    if (statusFilter === "all") return mockUsers;
-    return mockUsers.filter((user) => user.status === statusFilter);
-  }, [statusFilter]);
+    if (statusFilter === "all") return users;
+    return users.filter((user) => user.status === statusFilter);
+  }, [users, statusFilter]);
+
+  // CRUD Operations
+  const handleAddUser = () => {
+    setEditUser(null);
+    setShowUserForm(true);
+  };
+
+  const handleEditUser = (user: User) => {
+    setEditUser(user);
+    setShowUserForm(true);
+  };
+
+  const handleSaveUser = (data: UserFormData) => {
+    if (editUser) {
+      // Update existing user
+      setUsers(
+        users.map((u) =>
+          u.id === editUser.id
+            ? {
+                ...u,
+                ...data,
+                updated_at: new Date().toISOString(),
+              }
+            : u
+        )
+      );
+      toast({
+        title: "User Updated",
+        description: `${data.username} has been successfully updated.`,
+        variant: "success",
+      });
+    } else {
+      // Add new user
+      const newUser: User = {
+        id: `USR${(users.length + 1).toString().padStart(3, "0")}`,
+        ...data,
+        created_at: new Date().toISOString(),
+        last_login_at: undefined,
+        onboarding_completed: false,
+        total_runs: 0,
+        total_distance_km: 0,
+        total_duration_minutes: 0,
+        avg_pace: undefined,
+      };
+      setUsers([newUser, ...users]);
+      toast({
+        title: "User Created",
+        description: `${data.username} has been successfully created.`,
+        variant: "success",
+      });
+    }
+    setShowUserForm(false);
+    setEditUser(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteUser) {
+      setUsers(users.filter((u) => u.id !== deleteUser.id));
+      toast({
+        title: "User Deleted",
+        description: `${deleteUser.username} has been permanently deleted.`,
+        variant: "destructive",
+      });
+      setDeleteUser(null);
+    }
+  };
+
+  const handleSuspendUser = (user: User) => {
+    setUsers(
+      users.map((u) =>
+        u.id === user.id
+          ? { ...u, status: u.status === "suspended" ? "active" : "suspended" }
+          : u
+      )
+    );
+    toast({
+      title: user.status === "suspended" ? "User Activated" : "User Suspended",
+      description: `${user.username} has been ${
+        user.status === "suspended" ? "activated" : "suspended"
+      }.`,
+    });
+  };
+
+  const handleExportCSV = () => {
+    const headers = [
+      "ID",
+      "Username",
+      "Email",
+      "Status",
+      "Total Runs",
+      "Total Distance (km)",
+      "Created At",
+    ];
+    const csvData = filteredUsers.map((user) => [
+      user.id,
+      user.username,
+      user.email,
+      user.status,
+      user.total_runs,
+      user.total_distance_km,
+      format(new Date(user.created_at), "yyyy-MM-dd"),
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...csvData.map((row) => row.join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `users_export_${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export Successful",
+      description: `Exported ${filteredUsers.length} users to CSV.`,
+      variant: "success",
+    });
+  };
 
   const columns: ColumnDef<User>[] = [
     {
@@ -97,7 +232,7 @@ export default function UsersPage() {
       ),
     },
     {
-      accessorKey: "name",
+      accessorKey: "username",
       header: ({ column }) => {
         return (
           <Button
@@ -105,7 +240,7 @@ export default function UsersPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
-            Name
+            Username
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
@@ -113,7 +248,7 @@ export default function UsersPage() {
       cell: ({ row }) => (
         <div>
           <div className="font-medium text-gray-900 dark:text-white">
-            {row.getValue("name")}
+            {row.getValue("username")}
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400">
             {row.original.email}
@@ -122,7 +257,7 @@ export default function UsersPage() {
       ),
     },
     {
-      accessorKey: "registrationDate",
+      accessorKey: "created_at",
       header: ({ column }) => {
         return (
           <Button
@@ -137,7 +272,7 @@ export default function UsersPage() {
       },
       cell: ({ row }) => (
         <span className="text-sm">
-          {format(new Date(row.getValue("registrationDate")), "MMM dd, yyyy")}
+          {format(new Date(row.getValue("created_at")), "MMM dd, yyyy")}
         </span>
       ),
     },
@@ -198,13 +333,28 @@ export default function UsersPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push(`/dashboard/users/${user.id}`)}
+              >
                 <Eye className="mr-2 h-4 w-4" />
                 View Details
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleEditUser(user)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Edit User
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSuspendUser(user)}>
+                {user.status === "suspended" ? (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Activate User
+                  </>
+                ) : (
+                  <>
+                    <Ban className="mr-2 h-4 w-4" />
+                    Suspend User
+                  </>
+                )}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -252,13 +402,20 @@ export default function UsersPage() {
             User Management
           </h1>
           <p className="text-gray-700 dark:text-gray-300">
-            Manage and monitor all registered users
+            Manage and monitor all registered users ({filteredUsers.length}{" "}
+            total)
           </p>
         </div>
-        <Button variant="default">
-          <UserPlus className="mr-2 h-4 w-4" />
-          Add User
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportCSV}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+          <Button variant="default" onClick={handleAddUser}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add User
+          </Button>
+        </div>
       </motion.div>
 
       {/* Filters & Search */}
@@ -408,18 +565,29 @@ export default function UsersPage() {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the user{" "}
-              <span className="font-semibold">{deleteUser?.name}</span> and all
-              associated data. This action cannot be undone.
+              <span className="font-semibold">{deleteUser?.username}</span> and
+              all associated data. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700">
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleConfirmDelete}
+            >
               Delete User
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* User Form Dialog */}
+      <UserFormDialog
+        open={showUserForm}
+        onOpenChange={setShowUserForm}
+        user={editUser}
+        onSave={handleSaveUser}
+      />
     </div>
   );
 }
