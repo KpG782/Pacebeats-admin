@@ -90,159 +90,224 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="w-full max-w-md"
+        className="w-full max-w-6xl"
       >
-        <div className="bg-card rounded-2xl shadow-2xl p-8 border">
-          {/* Dark Mode Toggle */}
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-lg hover:bg-muted transition-colors"
-              aria-label="Toggle dark mode"
-            >
-              {isDarkMode ? (
-                <Sun className="h-5 w-5 text-white" />
-              ) : (
-                <Moon className="h-5 w-5 text-gray-900" />
-              )}
-            </button>
-          </div>
+        <div className="grid lg:grid-cols-2 gap-0 bg-card rounded-2xl shadow-2xl overflow-hidden border">
+          {/* Left Side - Image */}
+          <div className="hidden lg:flex relative bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 p-12 flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-8">
+                <Image
+                  src="/logo.png"
+                  alt="Pacebeats Logo"
+                  width={48}
+                  height={48}
+                  className="h-12 w-12 rounded-xl"
+                />
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Pacebeats
+                </span>
+              </div>
+              <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+                Manage Your Music Platform
+              </h2>
+              <p className="text-lg text-gray-700 dark:text-gray-300">
+                Powerful tools to manage users, sessions, and analytics all in
+                one place.
+              </p>
+            </div>
 
-          {/* Logo & Title */}
-          <div className="flex flex-col items-center mb-8">
-            <div className="relative mb-4">
+            {/* Placeholder for image - you can replace this with your actual image */}
+            <div className="relative h-64 mt-8 rounded-xl overflow-hidden bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
               <Image
-                src="/logo.png"
-                alt="Pacebeats Logo"
-                width={64}
-                height={64}
-                className="h-16 w-16 rounded-2xl"
+                src="/login-illustration.png"
+                alt="Dashboard Illustration"
+                width={400}
+                height={300}
+                className="object-contain"
+                onError={(e) => {
+                  // Fallback if image doesn't exist
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = "none";
+                }}
               />
+              <div className="absolute inset-0 flex items-center justify-center text-6xl text-primary/20">
+                🎵
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              Welcome Back
-            </h1>
-            <p className="text-gray-700 dark:text-gray-300 text-sm text-center">
-              Sign in to access the Pacebeats Admin Dashboard
-            </p>
           </div>
 
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Field */}
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-gray-900 dark:text-white font-medium">
-                Email Address
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@pacebeats.com"
-                value={email}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setEmail(e.target.value);
-                  if (errors.email) setErrors({ ...errors, email: "" });
-                }}
-                className={`text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                  errors.email ? "border-red-500" : ""
-                }`}
-              />
-              {errors.email && (
-                <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-              )}
+          {/* Right Side - Form */}
+          <div className="p-8 lg:p-12">
+            {/* Dark Mode Toggle */}
+            <div className="flex justify-end mb-6">
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Toggle dark mode"
+              >
+                {isDarkMode ? (
+                  <Sun className="h-5 w-5 text-white" />
+                ) : (
+                  <Moon className="h-5 w-5 text-gray-400" />
+                )}
+              </button>
             </div>
 
-            {/* Password Field */}
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-gray-900 dark:text-white font-medium">
-                Password
-              </Label>
-              <div className="relative">
+            {/* Mobile Logo & Title */}
+            <div className="flex flex-col mb-8 lg:hidden">
+              <div className="flex items-center gap-2 mb-4">
+                <Image
+                  src="/logo.png"
+                  alt="Pacebeats Logo"
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 rounded-xl"
+                />
+                <span className="text-xl font-bold text-gray-900 dark:text-white">
+                  Pacebeats
+                </span>
+              </div>
+            </div>
+
+            {/* Form Title */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                Welcome Back
+              </h1>
+              <p className="text-gray-700 dark:text-gray-300">
+                Sign in to access the Admin Dashboard
+              </p>
+            </div>
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Email Field */}
+              <div className="space-y-2">
+                <Label
+                  htmlFor="email"
+                  className="text-gray-900 dark:text-white font-medium"
+                >
+                  Email Address
+                </Label>
                 <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
+                  id="email"
+                  type="email"
+                  placeholder="admin@pacebeats.com"
+                  value={email}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    setPassword(e.target.value);
-                    if (errors.password) setErrors({ ...errors, password: "" });
+                    setEmail(e.target.value);
+                    if (errors.email) setErrors({ ...errors, email: "" });
                   }}
-                  className={`text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 pr-10 ${
-                    errors.password ? "border-red-500" : ""
+                  className={`text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                    errors.email ? "border-red-500" : ""
                   }`}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
+                {errors.email && (
+                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+                )}
               </div>
-              {errors.password && (
-                <p className="text-red-500 text-xs mt-1">{errors.password}</p>
-              )}
-            </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="remember"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) =>
-                    setRememberMe(checked as boolean)
-                  }
-                />
+              {/* Password Field */}
+              <div className="space-y-2">
                 <Label
-                  htmlFor="remember"
-                  className="text-sm text-gray-800 dark:text-gray-300 cursor-pointer"
+                  htmlFor="password"
+                  className="text-gray-900 dark:text-white font-medium"
                 >
-                  Remember me
+                  Password
                 </Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setPassword(e.target.value);
+                      if (errors.password)
+                        setErrors({ ...errors, password: "" });
+                    }}
+                    className={`text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 pr-10 ${
+                      errors.password ? "border-red-500" : ""
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="text-red-500 text-xs mt-1">{errors.password}</p>
+                )}
               </div>
-              <a
-                href="#"
-                className="text-sm text-primary hover:text-primary/80 transition-colors"
+
+              {/* Remember Me & Forgot Password */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="remember"
+                    checked={rememberMe}
+                    onCheckedChange={(checked) =>
+                      setRememberMe(checked as boolean)
+                    }
+                  />
+                  <Label
+                    htmlFor="remember"
+                    className="text-sm text-gray-800 dark:text-gray-300 cursor-pointer"
+                  >
+                    Remember me
+                  </Label>
+                </div>
+                <a
+                  href="#"
+                  className="text-sm text-primary hover:text-primary/80 transition-colors"
+                >
+                  Forgot password?
+                </a>
+              </div>
+
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-6"
               >
-                Forgot password?
-              </a>
+                {isLoading ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{
+                      duration: 1,
+                      repeat: Infinity,
+                      ease: "linear",
+                    }}
+                    className="h-5 w-5 border-2 border-white border-t-transparent rounded-full"
+                  />
+                ) : (
+                  "Sign In"
+                )}
+              </Button>
+            </form>
+
+            {/* Footer */}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Need help?{" "}
+                <a
+                  href="#"
+                  onClick={handleAutoFill}
+                  className="text-primary hover:text-primary/80 transition-colors"
+                >
+                  Contact Support
+                </a>
+              </p>
             </div>
-
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-6"
-            >
-              {isLoading ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  className="h-5 w-5 border-2 border-white border-t-transparent rounded-full"
-                />
-              ) : (
-                "Sign In"
-              )}
-            </Button>
-          </form>
-
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              Need help?{" "}
-              <a
-                href="#"
-                onClick={handleAutoFill}
-                className="text-primary hover:text-primary/80 transition-colors"
-              >
-                Contact Support
-              </a>
-            </p>
           </div>
         </div>
 
