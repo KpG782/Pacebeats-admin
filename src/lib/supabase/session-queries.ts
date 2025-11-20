@@ -99,6 +99,19 @@ export interface SessionDetail extends SessionData {
   pace_intervals: PaceInterval[];
 }
 
+export interface UserWithSessions {
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  total_sessions: number;
+  total_distance_km: number;
+  total_duration_seconds: number;
+  avg_heart_rate_bpm: number;
+  total_songs: number;
+  last_session_date: string;
+  created_at: string;
+}
+
 /**
  * Fetch all running sessions with user information
  */
@@ -106,19 +119,11 @@ export async function getAllSessions(): Promise<SessionData[]> {
   console.log("🔍 Fetching sessions from running_sessions table...");
 
   try {
-    // Fetch all running sessions with user data
+    // Fetch all running sessions WITHOUT join (Android pattern)
     const { data: sessions, error: sessionsError } = await supabase
       .from("running_sessions")
-      .select(
-        `
-        *,
-        users (
-          email,
-          username
-        )
-      `
-      )
-      .order("start_time", { ascending: false });
+      .select("*")
+      .order("session_start_time", { ascending: false });
 
     if (sessionsError) {
       console.error("❌ Error fetching sessions:", {
@@ -137,6 +142,20 @@ export async function getAllSessions(): Promise<SessionData[]> {
     }
 
     console.log(`✅ Found ${sessions.length} sessions`);
+
+    // Fetch users separately (Android pattern)
+    const userIds = [...new Set(sessions.map((s) => s.user_id))];
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("id, email, username")
+      .in("id", userIds);
+
+    if (usersError) {
+      console.error("⚠️ Error fetching users:", usersError);
+    }
+
+    // Create user map for quick lookup
+    const userMap = new Map((users || []).map((u) => [u.id, u]));
 
     // Fetch music history for all sessions to calculate music stats
     const sessionIds = sessions.map((s) => s.id);
@@ -199,7 +218,7 @@ export async function getAllSessions(): Promise<SessionData[]> {
 
     // Map to SessionData format
     const sessionsData: SessionData[] = sessions.map((session) => {
-      const user = session.users;
+      const user = userMap.get(session.user_id);
       const musicStats = musicBySession.get(session.id) || {
         total: 0,
         completed: 0,
@@ -215,18 +234,17 @@ export async function getAllSessions(): Promise<SessionData[]> {
         user_id: session.user_id,
         user_email: user?.email || "Unknown",
         user_name: user?.username || "Unknown User",
-        started_at: session.start_time,
-        ended_at: session.end_time,
-        duration_seconds: session.duration_seconds,
-        duration_minutes: Math.round((session.duration_seconds || 0) / 60),
-        distance_km: session.distance_meters
-          ? session.distance_meters / 1000
-          : 0,
+        started_at: session.session_start_time,
+        ended_at: session.session_end_time,
+        duration_seconds: session.session_duration_seconds,
+        duration_minutes: Math.round(
+          (session.session_duration_seconds || 0) / 60
+        ),
+        distance_km: session.total_distance_km || 0,
         total_steps: session.total_steps || 0,
         avg_pace_min_per_km: session.avg_pace_min_per_km,
         avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm:
-          session.avg_heart_rate || session.avg_heart_rate_bpm,
+        avg_heart_rate_bpm: session.avg_heart_rate_bpm || 0,
         max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
         min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
         avg_speed_kmh: session.avg_speed_kmh || 0,
@@ -266,18 +284,10 @@ export async function getSessionDetail(
   console.log(`🔍 Fetching session detail for ${sessionId}...`);
 
   try {
-    // Fetch main session with user data
+    // Fetch main session WITHOUT join (Android pattern)
     const { data: session, error: sessionError } = await supabase
       .from("running_sessions")
-      .select(
-        `
-        *,
-        users (
-          email,
-          username
-        )
-      `
-      )
+      .select("*")
       .eq("id", sessionId)
       .single();
 
@@ -298,6 +308,17 @@ export async function getSessionDetail(
 
     console.log("✅ Session found, fetching related data...");
 
+    // Fetch user separately (Android pattern)
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id, email, username")
+      .eq("id", session.user_id)
+      .single();
+
+    if (userError) {
+      console.warn("⚠️ Error fetching user:", userError.message);
+    }
+
     // Fetch all related data in parallel
     const [
       { data: heartRateData, error: hrError },
@@ -309,25 +330,29 @@ export async function getSessionDetail(
         .from("session_heart_rate_data")
         .select("*")
         .eq("session_id", sessionId)
-        .order("timestamp_offset_seconds", { ascending: true }),
+        .order("timestamp_offset_seconds", { ascending: true })
+        .limit(5000), // Performance limit - same as Android app
 
       supabase
         .from("session_music_history")
         .select("*")
         .eq("session_id", sessionId)
-        .order("play_order", { ascending: true }),
+        .order("play_order", { ascending: true })
+        .limit(200), // Performance limit - same as Android app
 
       supabase
         .from("session_gps_points")
         .select("*")
         .eq("session_id", sessionId)
-        .order("timestamp_offset_seconds", { ascending: true }),
+        .order("timestamp_offset_seconds", { ascending: true })
+        .limit(10000), // Performance limit - same as Android app
 
       supabase
         .from("session_pace_intervals")
         .select("*")
         .eq("session_id", sessionId)
-        .order("interval_number", { ascending: true }),
+        .order("interval_number", { ascending: true })
+        .limit(100), // Performance limit - same as Android app
     ]);
 
     // Log any errors but continue with available data
@@ -358,23 +383,23 @@ export async function getSessionDetail(
         ) || 0,
     };
 
-    const user = session.users;
-
     const sessionDetail: SessionDetail = {
       id: session.id,
       session_id: session.id,
       user_id: session.user_id,
       user_email: user?.email || "Unknown",
       user_name: user?.username || "Unknown User",
-      started_at: session.start_time,
-      ended_at: session.end_time,
-      duration_seconds: session.duration_seconds,
-      duration_minutes: Math.round((session.duration_seconds || 0) / 60),
-      distance_km: session.distance_meters ? session.distance_meters / 1000 : 0,
+      started_at: session.session_start_time,
+      ended_at: session.session_end_time,
+      duration_seconds: session.session_duration_seconds,
+      duration_minutes: Math.round(
+        (session.session_duration_seconds || 0) / 60
+      ),
+      distance_km: session.total_distance_km || 0,
       total_steps: session.total_steps || 0,
       avg_pace_min_per_km: session.avg_pace_min_per_km,
       avg_cadence_spm: session.avg_cadence_spm || 0,
-      avg_heart_rate_bpm: session.avg_heart_rate || session.avg_heart_rate_bpm,
+      avg_heart_rate_bpm: session.avg_heart_rate_bpm || 0,
       max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
       min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
       avg_speed_kmh: session.avg_speed_kmh || 0,
@@ -387,7 +412,7 @@ export async function getSessionDetail(
       run_type: session.run_type || "quick",
       selected_emotion: session.selected_emotion,
       selected_playlist: session.selected_playlist,
-      status: session.status || "completed",
+      status: "completed",
       created_at: session.created_at,
       heart_rate_data: (heartRateData || []) as HeartRateData[],
       music_history: (musicHistory || []) as MusicTrack[],
@@ -422,19 +447,12 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
   console.log(`🔍 Fetching sessions for user ${userId}...`);
 
   try {
+    // Fetch sessions WITHOUT join (Android pattern)
     const { data: sessions, error } = await supabase
       .from("running_sessions")
-      .select(
-        `
-        *,
-        users (
-          email,
-          username
-        )
-      `
-      )
+      .select("*")
       .eq("user_id", userId)
-      .order("start_time", { ascending: false });
+      .order("session_start_time", { ascending: false });
 
     if (error) {
       console.error("❌ Error fetching user sessions:", {
@@ -448,6 +466,17 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
     if (!sessions || sessions.length === 0) {
       console.log("⚠️ No sessions found for this user");
       return [];
+    }
+
+    // Fetch user info separately (Android pattern)
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id, email, username")
+      .eq("id", userId)
+      .single();
+
+    if (userError) {
+      console.error("⚠️ Error fetching user:", userError);
     }
 
     // Get music stats for these sessions
@@ -504,7 +533,6 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
     });
 
     const sessionsData = sessions.map((session) => {
-      const user = session.users;
       const musicStats = musicBySession.get(session.id) || {
         total: 0,
         completed: 0,
@@ -519,18 +547,17 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
         user_id: session.user_id,
         user_email: user?.email || "Unknown",
         user_name: user?.username || "Unknown User",
-        started_at: session.start_time,
-        ended_at: session.end_time,
-        duration_seconds: session.duration_seconds,
-        duration_minutes: Math.round((session.duration_seconds || 0) / 60),
-        distance_km: session.distance_meters
-          ? session.distance_meters / 1000
-          : 0,
+        started_at: session.session_start_time,
+        ended_at: session.session_end_time,
+        duration_seconds: session.session_duration_seconds,
+        duration_minutes: Math.round(
+          (session.session_duration_seconds || 0) / 60
+        ),
+        distance_km: session.total_distance_km || 0,
         total_steps: session.total_steps || 0,
         avg_pace_min_per_km: session.avg_pace_min_per_km,
         avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm:
-          session.avg_heart_rate || session.avg_heart_rate_bpm,
+        avg_heart_rate_bpm: session.avg_heart_rate_bpm || 0,
         max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
         min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
         avg_speed_kmh: session.avg_speed_kmh || 0,
@@ -553,6 +580,136 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
   } catch (error: unknown) {
     const err = error as Error;
     console.error("❌ Unexpected error in getUserSessions:", {
+      message: err?.message || "Unknown error",
+      name: err?.name,
+    });
+    return [];
+  }
+}
+
+/**
+ * Get all users with their session statistics
+ */
+export async function getUsersWithSessions(): Promise<UserWithSessions[]> {
+  console.log("🔍 Fetching users with session statistics...");
+
+  try {
+    // Fetch all users
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("id, email, username, created_at")
+      .order("created_at", { ascending: false });
+
+    if (usersError) {
+      console.error("❌ Error fetching users:", usersError);
+      return [];
+    }
+
+    if (!users || users.length === 0) {
+      console.log("⚠️ No users found");
+      return [];
+    }
+
+    // Fetch all sessions (get all columns to avoid field name issues)
+    const { data: sessions, error: sessionsError } = await supabase
+      .from("running_sessions")
+      .select("*");
+
+    if (sessionsError) {
+      console.error("⚠️ Error fetching sessions:", sessionsError);
+    }
+
+    // Fetch all session IDs first to get music count
+    const allSessionIds = (sessions || []).map((s) => s.id);
+
+    // Fetch music history count with proper session_id mapping
+    let musicData: Array<{ session_id: string }> = [];
+    if (allSessionIds.length > 0) {
+      const { data, error: musicError } = await supabase
+        .from("session_music_history")
+        .select("session_id")
+        .in("session_id", allSessionIds);
+
+      if (musicError) {
+        console.warn("⚠️ Error fetching music data:", musicError);
+      } else {
+        musicData = data || [];
+      }
+    }
+
+    // Group sessions by user
+    const sessionsByUser = new Map<string, typeof sessions>();
+    (sessions || []).forEach((session) => {
+      if (!sessionsByUser.has(session.user_id)) {
+        sessionsByUser.set(session.user_id, []);
+      }
+      sessionsByUser.get(session.user_id)!.push(session);
+    });
+
+    // Count music tracks per user
+    const musicCountByUser = new Map<string, number>();
+    (sessions || []).forEach((session) => {
+      if (!musicCountByUser.has(session.user_id)) {
+        const userSessions = sessionsByUser.get(session.user_id) || [];
+        const userSessionIds = userSessions.map((s) => s.id);
+        const count = musicData.filter((m) =>
+          userSessionIds.includes(m.session_id)
+        ).length;
+        musicCountByUser.set(session.user_id, count);
+      }
+    });
+
+    // Map users with their stats
+    const usersWithStats: UserWithSessions[] = users.map((user) => {
+      const userSessions = sessionsByUser.get(user.id) || [];
+      const totalDistance = userSessions.reduce(
+        (sum, s) => sum + (s.total_distance_km || 0),
+        0
+      );
+      const totalDuration = userSessions.reduce(
+        (sum, s) => sum + (s.session_duration_seconds || 0),
+        0
+      );
+
+      // Calculate average heart rate
+      const avgHeartRate =
+        userSessions.length > 0
+          ? Math.round(
+              userSessions.reduce(
+                (sum, s) => sum + (s.avg_heart_rate_bpm || 0),
+                0
+              ) / userSessions.length
+            )
+          : 0;
+
+      const lastSessionDate =
+        userSessions.length > 0
+          ? userSessions.sort(
+              (a, b) =>
+                new Date(b.session_start_time).getTime() -
+                new Date(a.session_start_time).getTime()
+            )[0].session_start_time
+          : user.created_at;
+
+      return {
+        user_id: user.id,
+        user_email: user.email || "Unknown",
+        user_name: user.username || "Unknown User",
+        total_sessions: userSessions.length,
+        total_distance_km: totalDistance,
+        total_duration_seconds: totalDuration,
+        avg_heart_rate_bpm: avgHeartRate,
+        total_songs: musicCountByUser.get(user.id) || 0,
+        last_session_date: lastSessionDate,
+        created_at: user.created_at,
+      };
+    });
+
+    console.log(`✅ Loaded ${usersWithStats.length} users with stats`);
+    return usersWithStats;
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error("❌ Unexpected error in getUsersWithSessions:", {
       message: err?.message || "Unknown error",
       name: err?.name,
     });

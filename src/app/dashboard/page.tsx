@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,17 +12,11 @@ import {
   Music,
   TrendingUp,
   ArrowRight,
-  Clock,
-  PlayCircle,
-  Headphones,
-  Radio,
   BarChart3,
+  Heart,
+  Zap,
 } from "lucide-react";
-import { enhancedAnalyticsData } from "@/lib/enhanced-analytics-data";
-import { enhancedMusicTracks } from "@/lib/enhanced-music-data";
-import { enhancedMockUsers } from "@/lib/enhanced-mock-data";
-import { enhancedMockSessions } from "@/lib/enhanced-session-data";
-import { formatDistanceToNow } from "date-fns";
+import { supabase } from "@/lib/supabase/client";
 import Link from "next/link";
 
 const containerVariants = {
@@ -39,74 +34,207 @@ const itemVariants = {
   show: { opacity: 1, y: 0 },
 };
 
+interface DashboardStats {
+  totalUsers: number;
+  activeUsers: number;
+  totalSessions: number;
+  activeSessions: number;
+  totalTracks: number;
+  activeRunners: number;
+  avgHeartRate: number;
+}
+
+interface LiveRunner {
+  id: string;
+  username: string;
+  heart_rate: number;
+  distance_km: number;
+  duration_seconds: number;
+  connection_status: string;
+}
+
 export default function DashboardPage() {
-  const stats = enhancedAnalyticsData.dashboardStats;
-  const topTracks = enhancedAnalyticsData.songPopularity.slice(0, 5);
-  const topGenres = enhancedAnalyticsData.genreDistribution
-    .sort((a, b) => b.avgPlays - a.avgPlays)
-    .slice(0, 3);
-  const topMoods = enhancedAnalyticsData.moodDistribution
-    .sort((a, b) => b.tracks - a.tracks)
-    .slice(0, 3);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    activeUsers: 0,
+    totalSessions: 0,
+    activeSessions: 0,
+    totalTracks: 0,
+    activeRunners: 0,
+    avgHeartRate: 0,
+  });
+  const [liveRunners, setLiveRunners] = useState<LiveRunner[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Get recent activity from tracks, users, sessions
-  const recentActivity = [
-    ...enhancedMusicTracks.slice(0, 3).map((track) => ({
-      id: track.id,
-      type: "music_added",
-      message: `New track added: ${track.track_name} by ${track.artist_name}`,
-      timestamp: track.added_at,
-    })),
-    ...enhancedMockUsers.slice(0, 2).map((user) => ({
-      id: user.id,
-      type: user.status === "active" ? "user_registered" : "user_inactive",
-      message: `User ${user.username} ${
-        user.status === "active" ? "is active" : "went inactive"
-      }`,
-      timestamp: user.created_at,
-    })),
-    ...enhancedMockSessions.slice(0, 2).map((session) => ({
-      id: session.id,
-      type: "session_completed",
-      message: `Session completed: ${(
-        session.total_distance_meters / 1000
-      ).toFixed(1)}km in ${Math.round(session.duration_seconds / 60)} min`,
-      timestamp: session.started_at,
-    })),
-  ]
-    .sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    )
-    .slice(0, 6);
+  useEffect(() => {
+    fetchDashboardData();
 
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case "user_registered":
-        return Users;
-      case "session_completed":
-        return Activity;
-      case "music_added":
-        return Music;
-      case "user_inactive":
-        return Clock;
-      default:
-        return Activity;
+    // Set up real-time subscriptions
+    const channel = supabase
+      .channel("dashboard-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "running_sessions",
+        },
+        () => {
+          fetchDashboardData();
+        }
+      )
+      .subscribe();
+
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchDashboardData, 10000);
+
+    return () => {
+      channel.unsubscribe();
+      clearInterval(interval);
+    };
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      // Fetch total users count
+      const { count: usersCount } = await supabase
+        .from("users")
+        .select("*", { count: "exact", head: true });
+
+      // Fetch total sessions count
+      const { count: sessionsCount } = await supabase
+        .from("running_sessions")
+        .select("*", { count: "exact", head: true });
+
+      // Fetch active sessions (status = 'active')
+      const { count: activeSessionsCount } = await supabase
+        .from("running_sessions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active");
+
+      // Fetch total music tracks count
+      const { count: tracksCount } = await supabase
+        .from("music_tracks")
+        .select("*", { count: "exact", head: true });
+
+      // Fetch live runners with details
+      const { data: runnersData } = await supabase
+        .from("running_sessions")
+        .select(
+          `
+          id,
+          current_distance_km,
+          elapsed_time_seconds,
+          last_heartbeat_at,
+          users!inner (
+            username
+          ),
+          session_heart_rate_data!left (
+            heart_rate_bpm,
+            recorded_at
+          )
+        `
+        )
+        .eq("status", "active")
+        .order("last_heartbeat_at", { ascending: false })
+        .limit(5);
+
+      // Process live runners
+      const processedRunners = (runnersData || []).map(
+        (runner: {
+          id: string;
+          users:
+            | { username?: string; email?: string }[]
+            | { username?: string; email?: string };
+          session_heart_rate_data?: {
+            heart_rate_bpm: number;
+            recorded_at: string;
+          }[];
+          current_distance_km: number | null;
+          elapsed_time_seconds: number | null;
+          last_heartbeat_at: string;
+        }) => {
+          const user = Array.isArray(runner.users)
+            ? runner.users[0]
+            : runner.users;
+          const latestHR =
+            runner.session_heart_rate_data &&
+            runner.session_heart_rate_data.length > 0
+              ? [...runner.session_heart_rate_data].sort(
+                  (a, b) =>
+                    new Date(b.recorded_at).getTime() -
+                    new Date(a.recorded_at).getTime()
+                )[0].heart_rate_bpm
+              : 0;
+
+          const secondsSinceUpdate = runner.last_heartbeat_at
+            ? Math.floor(
+                (Date.now() - new Date(runner.last_heartbeat_at).getTime()) /
+                  1000
+              )
+            : 999;
+
+          let connectionStatus = "LOST";
+          if (secondsSinceUpdate < 10) connectionStatus = "LIVE";
+          else if (secondsSinceUpdate < 30) connectionStatus = "SLOW";
+
+          return {
+            id: runner.id,
+            username: user?.username || "Unknown",
+            heart_rate: latestHR,
+            distance_km: runner.current_distance_km || 0,
+            duration_seconds: runner.elapsed_time_seconds || 0,
+            connection_status: connectionStatus,
+          };
+        }
+      );
+
+      // Calculate average heart rate
+      const avgHR =
+        processedRunners.length > 0
+          ? Math.round(
+              processedRunners.reduce((sum, r) => sum + r.heart_rate, 0) /
+                processedRunners.length
+            )
+          : 0;
+
+      setStats({
+        totalUsers: usersCount || 0,
+        activeUsers: usersCount || 0,
+        totalSessions: sessionsCount || 0,
+        activeSessions: activeSessionsCount || 0,
+        totalTracks: tracksCount || 0,
+        activeRunners: processedRunners.length,
+        avgHeartRate: avgHR,
+      });
+
+      setLiveRunners(processedRunners);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      setLoading(false);
     }
   };
 
-  const getActivityColor = (type: string) => {
-    switch (type) {
-      case "user_registered":
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins < 60) return `${mins}m ${secs}s`;
+    const hours = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    return `${hours}h ${remainingMins}m`;
+  };
+
+  const getConnectionColor = (status: string) => {
+    switch (status) {
+      case "LIVE":
         return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-      case "session_completed":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-      case "music_added":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
-      case "user_inactive":
-        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400";
+      case "SLOW":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      case "LOST":
+        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
       default:
-        return "bg-muted text-muted-foreground";
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     }
   };
 
@@ -122,8 +250,8 @@ export default function DashboardPage() {
           Dashboard Overview
         </h1>
         <p className="text-gray-700 dark:text-gray-300">
-          Welcome back! Here&apos;s what&apos;s happening with your music
-          platform today.
+          Welcome back! Here&apos;s what&apos;s happening with your running
+          platform {loading && <span className="text-xs">(Loading...)</span>}
         </p>
       </motion.div>
 
@@ -140,7 +268,7 @@ export default function DashboardPage() {
           subtitle={`${stats.activeUsers} active users`}
           icon={Users}
           trend="up"
-          trendValue="+12.5% from last month"
+          trendValue="Real-time data"
           delay={0}
         />
         <StatsCard
@@ -149,28 +277,104 @@ export default function DashboardPage() {
           subtitle={`${stats.activeSessions} currently active`}
           icon={Activity}
           trend="up"
-          trendValue="+8.3% from last week"
+          trendValue={`${stats.activeRunners} live runners`}
           delay={0.1}
         />
         <StatsCard
           title="Music Library"
           value={stats.totalTracks}
-          subtitle={`${stats.totalPlays.toLocaleString()} total plays`}
+          subtitle={`Available tracks`}
           icon={Music}
           trend="up"
-          trendValue={`${topGenres[0]?.name || "Electronic"} is trending`}
+          trendValue="Growing library"
           delay={0.2}
         />
         <StatsCard
-          title="Avg Session Duration"
-          value={`${Math.round(stats.avgSessionDuration / 60)} min`}
-          subtitle={`${stats.avgSongsPerSession.toFixed(1)} songs/session`}
-          icon={TrendingUp}
-          trend="up"
-          trendValue={`${stats.avgCompletionRate.toFixed(0)}% completion rate`}
+          title="Avg Heart Rate"
+          value={stats.avgHeartRate > 0 ? `${stats.avgHeartRate} bpm` : "--"}
+          subtitle={`${stats.activeRunners} runners monitored`}
+          icon={Heart}
+          trend={stats.avgHeartRate > 0 ? "up" : "neutral"}
+          trendValue={
+            stats.avgHeartRate > 0 ? "Live monitoring" : "No active runners"
+          }
           delay={0.3}
         />
       </motion.div>
+
+      {/* Live Runners Section */}
+      {liveRunners.length > 0 && (
+        <motion.div
+          variants={itemVariants}
+          initial="hidden"
+          animate="show"
+          transition={{ delay: 0.4 }}
+        >
+          <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-950/20 dark:to-pink-950/20 border-red-200 dark:border-red-800">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-red-500 animate-pulse" />
+                <CardTitle className="text-gray-900 dark:text-white">
+                  Live Runners ({liveRunners.length})
+                </CardTitle>
+              </div>
+              <Link href="/dashboard/iot-monitor">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 dark:text-red-400"
+                >
+                  View Monitor
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {liveRunners.map((runner) => (
+                  <div
+                    key={runner.id}
+                    className="p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-gray-900 dark:text-white truncate">
+                        {runner.username}
+                      </span>
+                      <Badge
+                        className={getConnectionColor(runner.connection_status)}
+                      >
+                        {runner.connection_status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <p className="text-gray-500 dark:text-gray-400">HR</p>
+                        <p className="font-bold text-red-600 dark:text-red-400">
+                          {runner.heart_rate} bpm
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 dark:text-gray-400">
+                          Distance
+                        </p>
+                        <p className="font-bold text-blue-600 dark:text-blue-400">
+                          {runner.distance_km.toFixed(2)} km
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 dark:text-gray-400">Time</p>
+                        <p className="font-bold text-green-600 dark:text-green-400">
+                          {formatDuration(runner.duration_seconds)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Quick Stats Overview */}
       <motion.div
@@ -183,14 +387,14 @@ export default function DashboardPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-blue-500 rounded-lg">
-                <Headphones className="h-6 w-6 text-white" />
+                <Activity className="h-6 w-6 text-white" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                  {topGenres[0]?.tracks || 0}
+                  {stats.activeSessions}
                 </p>
                 <p className="text-sm text-blue-700 dark:text-blue-300">
-                  {topGenres[0]?.name || "Electronic"} Tracks
+                  Active Sessions
                 </p>
               </div>
             </div>
@@ -201,14 +405,14 @@ export default function DashboardPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-purple-500 rounded-lg">
-                <Radio className="h-6 w-6 text-white" />
+                <Users className="h-6 w-6 text-white" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                  {topMoods[0]?.tracks || 0}
+                  {stats.totalUsers}
                 </p>
                 <p className="text-sm text-purple-700 dark:text-purple-300">
-                  {topMoods[0]?.name || "happy"} mood tracks
+                  Total Users
                 </p>
               </div>
             </div>
@@ -219,14 +423,14 @@ export default function DashboardPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-green-500 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-white" />
+                <Music className="h-6 w-6 text-white" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                  {stats.userRetentionRate.toFixed(1)}%
+                  {stats.totalTracks}
                 </p>
                 <p className="text-sm text-green-700 dark:text-green-300">
-                  User Retention Rate
+                  Music Tracks
                 </p>
               </div>
             </div>
@@ -235,67 +439,81 @@ export default function DashboardPage() {
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activity */}
+        {/* System Status */}
         <motion.div
           variants={itemVariants}
           initial="hidden"
           animate="show"
-          transition={{ delay: 0.4 }}
+          transition={{ delay: 0.5 }}
           className="lg:col-span-2"
         >
           <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="text-gray-900 dark:text-white">
-                Recent Activity
+                System Status
               </CardTitle>
-              <Link href="/dashboard/analytics">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-primary hover:text-primary/80"
-                >
-                  View All
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentActivity.map((activity, index) => (
-                  <motion.div
-                    key={activity.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.5 + index * 0.05 }}
-                    className="flex items-start gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-shrink-0">
-                      <div
-                        className={`h-10 w-10 rounded-full flex items-center justify-center ${getActivityColor(
-                          activity.type
-                        )}`}
-                      >
-                        {(() => {
-                          const Icon = getActivityIcon(activity.type);
-                          return <Icon className="h-5 w-5" />;
-                        })()}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {activity.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          {formatDistanceToNow(new Date(activity.timestamp), {
-                            addSuffix: true,
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Database
+                    </span>
+                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                      Operational
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    All queries responding normally
+                  </p>
+                </div>
+
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Real-time Updates
+                    </span>
+                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                      Connected
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    WebSocket active, live data streaming
+                  </p>
+                </div>
+
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      IoT Monitor
+                    </span>
+                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                      {stats.activeRunners} Active
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    {stats.activeRunners > 0
+                      ? `Tracking ${stats.activeRunners} runner${
+                          stats.activeRunners > 1 ? "s" : ""
+                        }`
+                      : "No active sessions"}
+                  </p>
+                </div>
+
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      API Server
+                    </span>
+                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                      Operational
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    All endpoints responding
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -316,8 +534,18 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <Link href="/dashboard/iot-monitor">
+                <Button
+                  variant="default"
+                  className="w-full justify-start bg-red-500 hover:bg-red-600"
+                >
+                  <Heart className="mr-2 h-4 w-4" />
+                  Live Monitor{" "}
+                  {stats.activeRunners > 0 && `(${stats.activeRunners})`}
+                </Button>
+              </Link>
               <Link href="/dashboard/users">
-                <Button variant="default" className="w-full justify-start">
+                <Button variant="secondary" className="w-full justify-start">
                   <Users className="mr-2 h-4 w-4" />
                   Manage Users
                 </Button>
@@ -343,79 +571,45 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Top Tracks */}
+          {/* Real-time Stats */}
           <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
             <CardHeader>
               <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
-                <PlayCircle className="h-5 w-5 text-primary" />
-                Top Tracks
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Live Stats
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {topTracks.map((track, index) => (
-                <div
-                  key={track.id}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-gray-500 dark:text-gray-400 font-medium w-4">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-gray-900 dark:text-white font-medium truncate">
-                        {track.name}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {track.artist}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className="ml-2">
-                    {track.plays.toLocaleString()}
-                  </Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* System Status */}
-          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-white">
-                System Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  API Server
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-700 dark:text-gray-300">
+                  Active Runners
                 </span>
-                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                  Operational
+                <Badge variant="secondary" className="ml-2">
+                  {stats.activeRunners}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Database
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-700 dark:text-gray-300">
+                  Avg Heart Rate
                 </span>
-                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                  Operational
+                <Badge variant="secondary" className="ml-2">
+                  {stats.avgHeartRate > 0 ? `${stats.avgHeartRate} bpm` : "--"}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Music Service
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-700 dark:text-gray-300">
+                  Total Users
                 </span>
-                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                  Operational
+                <Badge variant="secondary" className="ml-2">
+                  {stats.totalUsers}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  CDN
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-700 dark:text-gray-300">
+                  Music Tracks
                 </span>
-                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                  Operational
+                <Badge variant="secondary" className="ml-2">
+                  {stats.totalTracks}
                 </Badge>
               </div>
             </CardContent>

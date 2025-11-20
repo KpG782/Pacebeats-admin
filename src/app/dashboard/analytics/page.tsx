@@ -1,841 +1,951 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/use-toast";
+import { StatsCard } from "@/components/dashboard/stats-card";
 import {
-  Download,
-  TrendingUp,
-  TrendingDown,
-  Users,
-  Music,
   Activity,
+  Users,
+  TrendingUp,
+  Music,
+  Heart,
   Clock,
+  MapPin,
+  Zap,
+  Target,
+  Flame,
+  Headphones,
+  Radio,
+  Download,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import {
   BarChart,
   Bar,
+  Line,
   PieChart,
   Pie,
-  Line,
   AreaChart,
   Area,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell,
   ComposedChart,
 } from "recharts";
 import {
-  enhancedAnalyticsData,
-  getTopGenres,
-  getRecommendationTrend,
-} from "@/lib/enhanced-analytics-data";
-import { useToast } from "@/components/ui/use-toast";
-import { StatsCard } from "@/components/dashboard/stats-card";
+  getAnalyticsSummary,
+  getUserGrowthData,
+  getSessionTrends,
+  getMusicAnalytics,
+  getRunTypeAnalytics,
+  getTimeAnalytics,
+  getPerformanceMetrics,
+  type AnalyticsSummary,
+  type UserGrowthData,
+  type SessionTrendData,
+  type MusicAnalytics,
+  type RunTypeAnalytics,
+  type TimeAnalytics,
+  type PerformanceMetrics,
+} from "@/lib/supabase/analytics-queries";
 
 const COLORS = [
   "oklch(0.55 0.18 250)", // Pacebeats Blue
-  "oklch(0.65 0.15 200)", // Light Blue
-  "oklch(0.70 0.12 180)", // Cyan
-  "oklch(0.60 0.16 220)", // Medium Blue
-  "oklch(0.50 0.20 260)", // Deep Blue
-  "oklch(0.75 0.10 200)", // Very Light Blue
-  "oklch(0.58 0.17 240)", // Mid Blue
-  "oklch(0.52 0.19 255)", // Deep Blue 2
+  "oklch(0.70 0.20 160)", // Green
+  "oklch(0.65 0.22 40)", // Orange
+  "oklch(0.75 0.18 200)", // Cyan
+  "oklch(0.60 0.20 320)", // Purple
+  "oklch(0.70 0.22 80)", // Yellow
 ];
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0 },
+};
+
 export default function AnalyticsPage() {
-  const [dateRange, setDateRange] = useState("month");
-  const [activeTab, setActiveTab] = useState("overview");
   const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [timeRange] = useState<number>(30);
 
-  const {
-    dashboardStats,
-    songPopularity,
-    genreDistribution,
-    moodDistribution,
-    bpmDistribution,
-    userActivityTrend,
-    sessionMetrics,
-    musicEngagement,
-    recommendationAccuracy,
-    peakUsageHours,
-  } = enhancedAnalyticsData;
+  // Data states
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [userGrowth, setUserGrowth] = useState<UserGrowthData[]>([]);
+  const [sessionTrends, setSessionTrends] = useState<SessionTrendData[]>([]);
+  const [musicData, setMusicData] = useState<MusicAnalytics | null>(null);
+  const [runTypeData, setRunTypeData] = useState<RunTypeAnalytics[]>([]);
+  const [timeData, setTimeData] = useState<TimeAnalytics[]>([]);
+  const [performanceData, setPerformanceData] =
+    useState<PerformanceMetrics | null>(null);
 
-  const handleExportData = () => {
-    toast({
-      title: "Export Started",
-      description: "Analytics data is being exported to CSV...",
-    });
+  const loadAnalytics = useCallback(
+    async (showToast = false) => {
+      if (showToast) setRefreshing(true);
+      else setLoading(true);
+      setError(null);
 
-    // Mock export logic
-    setTimeout(() => {
-      toast({
-        title: "Export Complete",
-        description: "Analytics report has been downloaded successfully.",
-      });
-    }, 1500);
+      try {
+        console.log("📊 Loading analytics data...");
+
+        // Load all data in parallel
+        const [
+          summaryData,
+          growthData,
+          trendsData,
+          musicAnalytics,
+          runTypes,
+          timeAnalytics,
+          performance,
+        ] = await Promise.all([
+          getAnalyticsSummary(),
+          getUserGrowthData(timeRange),
+          getSessionTrends(timeRange),
+          getMusicAnalytics(),
+          getRunTypeAnalytics(),
+          getTimeAnalytics(),
+          getPerformanceMetrics(),
+        ]);
+
+        setSummary(summaryData);
+        setUserGrowth(growthData);
+        setSessionTrends(trendsData);
+        setMusicData(musicAnalytics);
+        setRunTypeData(runTypes);
+        setTimeData(timeAnalytics);
+        setPerformanceData(performance);
+
+        console.log("✅ All analytics data loaded successfully");
+
+        if (showToast) {
+          toast({
+            title: "Analytics refreshed",
+            description: "All data has been updated successfully.",
+          });
+        }
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to load analytics";
+        console.error("❌ Analytics error:", err);
+        setError(errorMessage);
+        toast({
+          title: "Error loading analytics",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [toast, timeRange]
+  );
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
+
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
   };
 
-  const recommendationTrend = getRecommendationTrend();
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  if (loading) {
+    return (
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        className="space-y-6"
+      >
+        <motion.div
+          variants={itemVariants}
+          className="flex items-center justify-between"
+        >
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </motion.div>
+
+        <motion.div
+          variants={itemVariants}
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+        >
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="bg-white dark:bg-gray-900">
+              <CardHeader>
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </motion.div>
+
+        <motion.div variants={itemVariants}>
+          <Skeleton className="h-96 w-full" />
+        </motion.div>
+      </motion.div>
+    );
+  }
+
+  if (error) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex items-center justify-center min-h-[400px]"
+      >
+        <Card className="max-w-md bg-white dark:bg-gray-900">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Error Loading Analytics
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button onClick={() => loadAnalytics(true)} className="w-full">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Page Header */}
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="show"
+      className="space-y-6"
+    >
+      {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        variants={itemVariants}
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Analytics Dashboard
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+            Analytics
           </h1>
-          <p className="text-gray-700 dark:text-gray-300">
-            Insights into your music platform performance
+          <p className="text-muted-foreground">
+            Comprehensive insights into user activity and performance
           </p>
         </div>
-        <div className="flex gap-2">
-          <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="week">This Week</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-              <SelectItem value="year">This Year</SelectItem>
-              <SelectItem value="custom">Custom Range</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="default" onClick={handleExportData}>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadAnalytics(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
+          <Button variant="outline" size="sm">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
         </div>
       </motion.div>
 
-      {/* Stats Cards */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.05 }}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-      >
-        <StatsCard
-          title="Total Users"
-          value={dashboardStats.totalUsers.toString()}
-          icon={Users}
-          trend="up"
-          trendValue="+12.5%"
-        />
-        <StatsCard
-          title="Total Sessions"
-          value={dashboardStats.totalSessions.toLocaleString()}
-          icon={Activity}
-          trend="up"
-          trendValue="+8.2%"
-        />
-        <StatsCard
-          title="Total Plays"
-          value={dashboardStats.totalPlays.toLocaleString()}
-          icon={Music}
-          trend="up"
-          trendValue="+15.3%"
-        />
-        <StatsCard
-          title="Avg Session"
-          value={`${Math.round(dashboardStats.avgSessionDuration / 60)}m`}
-          icon={Clock}
-          trend="up"
-          trendValue="+5.1%"
-        />
-      </motion.div>
+      {/* Summary Stats */}
+      {summary && (
+        <motion.div
+          variants={itemVariants}
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+        >
+          <StatsCard
+            title="Total Users"
+            value={summary.totalUsers.toString()}
+            icon={Users}
+            subtitle={`${summary.activeUsers} active in last 30 days`}
+            trend="up"
+          />
+          <StatsCard
+            title="Total Sessions"
+            value={summary.totalSessions.toString()}
+            icon={Activity}
+            subtitle={`Avg ${formatDuration(
+              summary.avgSessionDuration
+            )} per session`}
+            trend="up"
+          />
+          <StatsCard
+            title="Total Distance"
+            value={`${summary.totalDistance.toFixed(1)} km`}
+            icon={MapPin}
+            subtitle={`Avg ${summary.avgSessionDistance.toFixed(
+              2
+            )} km per session`}
+            trend="up"
+          />
+          <StatsCard
+            title="Total Songs"
+            value={summary.totalSongs.toString()}
+            icon={Music}
+            subtitle={`${summary.totalHeartRateData} heart rate readings`}
+            trend="up"
+          />
+        </motion.div>
+      )}
 
-      {/* Tabs for Different Views */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="music">Music</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
-        </TabsList>
+      {/* Main Analytics Tabs */}
+      <motion.div variants={itemVariants}>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="sessions">Sessions</TabsTrigger>
+            <TabsTrigger value="music">Music</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
+          </TabsList>
 
-        {/* OVERVIEW TAB */}
-        <TabsContent value="overview" className="space-y-6">
-          {/* Top Songs */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Top 10 Most Popular Songs
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={songPopularity}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                      angle={-45}
-                      textAnchor="end"
-                      height={100}
-                    />
-                    <YAxis
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        color: "hsl(var(--foreground))",
-                      }}
-                    />
-                    <Bar
-                      dataKey="plays"
-                      fill="oklch(0.55 0.18 250)"
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Genre & Mood Distribution */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-            >
-              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            {/* User Growth & Session Trends */}
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-gray-900 dark:text-white">
-                    Genre Distribution
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Users className="h-5 w-5" />
+                    User Growth
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={userGrowth}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tickFormatter={formatDate} />
+                      <YAxis />
+                      <Tooltip labelFormatter={formatDate} />
+                      <Legend />
+                      <Area
+                        type="monotone"
+                        dataKey="totalUsers"
+                        name="Total Users"
+                        stroke={COLORS[0]}
+                        fill={COLORS[0]}
+                        fillOpacity={0.6}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="newUsers"
+                        name="New Users"
+                        stroke={COLORS[1]}
+                        fill={COLORS[1]}
+                        fillOpacity={0.4}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Activity className="h-5 w-5" />
+                    Session Trends
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <ComposedChart data={sessionTrends}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tickFormatter={formatDate} />
+                      <YAxis yAxisId="left" />
+                      <YAxis yAxisId="right" orientation="right" />
+                      <Tooltip labelFormatter={formatDate} />
+                      <Legend />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="sessions"
+                        name="Sessions"
+                        fill={COLORS[0]}
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="avgDistance"
+                        name="Avg Distance (km)"
+                        stroke={COLORS[2]}
+                        strokeWidth={2}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Run Types & Peak Hours */}
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Target className="h-5 w-5" />
+                    Run Type Distribution
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={genreDistribution as never[]}
+                        data={
+                          runTypeData as { runType: string; count: number }[]
+                        }
+                        dataKey="count"
+                        nameKey="runType"
                         cx="50%"
                         cy="50%"
-                        labelLine={false}
-                        label={({ name, value }) => `${name} (${value})`}
                         outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
+                        label
                       >
-                        {genreDistribution.map((entry, index) => (
+                        {runTypeData.map((_, index) => (
                           <Cell
                             key={`cell-${index}`}
-                            fill={entry.color || COLORS[index % COLORS.length]}
+                            fill={COLORS[index % COLORS.length]}
                           />
                         ))}
                       </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
+                      <Tooltip />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-            </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-            >
-              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-gray-900 dark:text-white">
-                    Mood Distribution
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Clock className="h-5 w-5" />
+                    Peak Activity Hours
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={moodDistribution as never[]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, value }) => `${name} (${value})`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {moodDistribution.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={entry.color || COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
+                    <BarChart data={timeData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} />
+                      <YAxis />
+                      <Tooltip labelFormatter={(h) => `${h}:00`} />
+                      <Legend />
+                      <Bar
+                        dataKey="sessions"
+                        name="Sessions"
+                        fill={COLORS[0]}
                       />
-                    </PieChart>
+                      <Bar
+                        dataKey="users"
+                        name="Active Users"
+                        fill={COLORS[1]}
+                      />
+                    </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-            </motion.div>
-          </div>
+            </div>
 
-          {/* Recommendation Accuracy */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.4 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-gray-900 dark:text-white">
-                    Recommendation Accuracy Over Time
-                  </CardTitle>
-                  <div
-                    className={`flex items-center gap-2 ${
-                      recommendationTrend >= 0
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {recommendationTrend >= 0 ? (
-                      <TrendingUp className="h-5 w-5" />
-                    ) : (
-                      <TrendingDown className="h-5 w-5" />
-                    )}
-                    <span className="text-sm font-semibold">
-                      {recommendationTrend >= 0 ? "+" : ""}
-                      {recommendationTrend.toFixed(1)}% this year
-                    </span>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <AreaChart data={recommendationAccuracy}>
-                    <defs>
-                      <linearGradient
-                        id="colorAccuracy"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="oklch(0.55 0.18 250)"
-                          stopOpacity={0.8}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="oklch(0.55 0.18 250)"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                      domain={[70, 100]}
-                      label={{
-                        value: "Accuracy (%)",
-                        angle: -90,
-                        position: "insideLeft",
-                        fill: "currentColor",
-                        className: "fill-gray-600 dark:fill-gray-400",
-                      }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(value) => [`${value}%`, "Accuracy"]}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="accuracy"
-                      stroke="oklch(0.55 0.18 250)"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorAccuracy)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        {/* MUSIC TAB */}
-        <TabsContent value="music" className="space-y-6">
-          {/* BPM Distribution */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  BPM Distribution & Popularity
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={bpmDistribution}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="range"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar
-                      yAxisId="left"
-                      dataKey="count"
-                      fill="oklch(0.55 0.18 250)"
-                      name="Track Count"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="avgPlays"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="Avg Plays"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 5 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Music Engagement */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Music Engagement Trends
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={musicEngagement}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="plays"
-                      fill="oklch(0.55 0.18 250)"
-                      fillOpacity={0.6}
-                      stroke="oklch(0.55 0.18 250)"
-                      name="Total Plays"
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="avgCompletionRate"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="Completion Rate (%)"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 4 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Top Genres Stats */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Top Performing Genres
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {getTopGenres().map((genre, index) => (
-                    <div
-                      key={genre.name}
-                      className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          {genre.name}
-                        </h3>
-                        <Badge style={{ backgroundColor: genre.color }}>
-                          #{index + 1}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                        Tracks: {genre.tracks}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Avg Plays: {genre.avgPlays.toLocaleString()}
-                      </p>
+            {/* Performance Metrics */}
+            {performanceData && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                      Avg Pace
+                    </CardTitle>
+                    <Zap className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {performanceData.avgPace.toFixed(2)} min/km
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
+                  </CardContent>
+                </Card>
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                      Avg Heart Rate
+                    </CardTitle>
+                    <Heart className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {performanceData.avgHeartRate} bpm
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                      Total Calories
+                    </CardTitle>
+                    <Flame className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {performanceData.totalCalories.toLocaleString()} kcal
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                      Total Steps
+                    </CardTitle>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {performanceData.totalSteps.toLocaleString()}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </TabsContent>
 
-        {/* USERS TAB */}
-        <TabsContent value="users" className="space-y-6">
-          {/* User Activity Trend */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  User Activity Trend (Last 30 Days)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={userActivityTrend}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                      tickFormatter={(date) =>
-                        new Date(date).getDate().toString()
-                      }
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="activeUsers"
-                      fill="oklch(0.55 0.18 250)"
-                      fillOpacity={0.6}
-                      stroke="oklch(0.55 0.18 250)"
-                      name="Active Users"
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="newUsers"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="New Users"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 4 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Peak Usage Hours */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Peak Usage Hours
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={peakUsageHours}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="hour"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar
-                      dataKey="sessions"
-                      fill="oklch(0.55 0.18 250)"
-                      name="Sessions"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="users"
-                      fill="oklch(0.70 0.12 180)"
-                      name="Active Users"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        {/* SESSIONS TAB */}
-        <TabsContent value="sessions" className="space-y-6">
-          {/* Session Metrics */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+          {/* Sessions Tab */}
+          <TabsContent value="sessions" className="space-y-6">
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
               <CardHeader>
                 <CardTitle className="text-gray-900 dark:text-white">
                   Session Metrics Over Time
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={sessionMetrics}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
+                <ResponsiveContainer width="100%" height={400}>
+                  <ComposedChart data={sessionTrends}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tickFormatter={formatDate} />
+                    <YAxis yAxisId="left" />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip labelFormatter={formatDate} />
                     <Legend />
                     <Bar
                       yAxisId="left"
-                      dataKey="totalSessions"
-                      fill="oklch(0.55 0.18 250)"
-                      name="Total Sessions"
-                      radius={[8, 8, 0, 0]}
+                      dataKey="sessions"
+                      name="Sessions"
+                      fill={COLORS[0]}
                     />
                     <Line
                       yAxisId="right"
                       type="monotone"
-                      dataKey="avgDuration"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="Avg Duration (s)"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 4 }}
+                      dataKey="avgDistance"
+                      name="Avg Distance (km)"
+                      stroke={COLORS[2]}
+                      strokeWidth={2}
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="avgPace"
+                      name="Avg Pace (min/km)"
+                      stroke={COLORS[4]}
+                      strokeWidth={2}
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          </motion.div>
-        </TabsContent>
-      </Tabs>
 
-      {/* Summary Stats */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.5 }}
-        className="grid grid-cols-1 md:grid-cols-4 gap-4"
-      >
-        <Card className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0">
-          <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">Avg. Session Length</p>
-            <p className="text-3xl font-bold">
-              {Math.round(dashboardStats.avgSessionDuration / 60)} min
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 8% from last month</p>
-          </CardContent>
-        </Card>
+            {/* Run Type Details */}
+            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gray-900 dark:text-white">
+                  Run Type Performance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {runTypeData.map((runType, index) => (
+                    <div key={runType.runType} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="h-3 w-3 rounded-full"
+                            style={{
+                              backgroundColor: COLORS[index % COLORS.length],
+                            }}
+                          />
+                          <span className="font-medium capitalize">
+                            {runType.runType}
+                          </span>
+                          <Badge variant="secondary">
+                            {runType.count} sessions
+                          </Badge>
+                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {runType.percentage}%
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">
+                            Avg Duration:
+                          </span>{" "}
+                          <span className="font-medium">
+                            {formatDuration(runType.avgDuration)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">
+                            Avg Distance:
+                          </span>{" "}
+                          <span className="font-medium">
+                            {runType.avgDistance.toFixed(2)} km
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">
+                            Avg Pace:
+                          </span>{" "}
+                          <span className="font-medium">
+                            {runType.avgPace > 0
+                              ? `${runType.avgPace.toFixed(2)} min/km`
+                              : "N/A"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <Card className="bg-gradient-to-br from-[oklch(0.65_0.15_200)] to-[oklch(0.60_0.16_220)] text-white border-0">
-          <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">User Retention</p>
-            <p className="text-3xl font-bold">
-              {dashboardStats.userRetentionRate.toFixed(1)}%
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 3% from last month</p>
-          </CardContent>
-        </Card>
+          {/* Music Tab */}
+          <TabsContent value="music" className="space-y-6">
+            {musicData && (
+              <>
+                {/* Music Overview Stats */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Total Tracks
+                      </CardTitle>
+                      <Music className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {musicData.totalTracks}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {musicData.totalPlays} total plays
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Skip Rate
+                      </CardTitle>
+                      <Radio className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {musicData.skipRate}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {musicData.completionRate}% completion
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Like Rate
+                      </CardTitle>
+                      <Headphones className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {musicData.likeRate}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        User engagement
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Avg Plays
+                      </CardTitle>
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {musicData.avgPlaysPerTrack}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Per track</p>
+                    </CardContent>
+                  </Card>
+                </div>
 
-        <Card className="bg-gradient-to-br from-[oklch(0.70_0.12_180)] to-[oklch(0.65_0.15_200)] text-white border-0">
-          <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">Avg. Songs per Session</p>
-            <p className="text-3xl font-bold">
-              {dashboardStats.avgSongsPerSession.toFixed(1)}
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 5% from last month</p>
-          </CardContent>
-        </Card>
+                {/* BPM Distribution */}
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                  <CardHeader>
+                    <CardTitle className="text-gray-900 dark:text-white">
+                      BPM Distribution
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={musicData.bpmDistribution}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="range" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="count" name="Tracks" fill={COLORS[0]} />
+                        <Bar
+                          dataKey="avgPlays"
+                          name="Avg Plays"
+                          fill={COLORS[2]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
 
-        <Card className="bg-gradient-to-br from-[oklch(0.60_0.16_220)] to-[oklch(0.55_0.18_250)] text-white border-0">
-          <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">User Satisfaction</p>
-            <p className="text-3xl font-bold">
-              {dashboardStats.userSatisfaction.toFixed(1)}/5
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 0.2 from last month</p>
-          </CardContent>
-        </Card>
+                {/* Top Tracks */}
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                  <CardHeader>
+                    <CardTitle className="text-gray-900 dark:text-white">
+                      Top 10 Tracks
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {musicData.topTracks.map((track, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium">{track.title}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {track.artist}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">
+                                Plays:
+                              </span>{" "}
+                              <span className="font-medium">{track.plays}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">
+                                Completed:
+                              </span>{" "}
+                              <span className="font-medium">
+                                {track.completions}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">
+                                Skipped:
+                              </span>{" "}
+                              <span className="font-medium">{track.skips}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          {/* Performance Tab */}
+          <TabsContent value="performance" className="space-y-6">
+            {performanceData && summary && (
+              <>
+                {/* Performance Summary */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Average Pace
+                      </CardTitle>
+                      <Zap className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {performanceData.avgPace.toFixed(2)} min/km
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Across all runs
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Average Heart Rate
+                      </CardTitle>
+                      <Heart className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {performanceData.avgHeartRate} bpm
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {summary.totalHeartRateData} readings
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Average Cadence
+                      </CardTitle>
+                      <Activity className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {performanceData.avgCadence} spm
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Steps per minute
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Average Speed
+                      </CardTitle>
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {performanceData.avgSpeed.toFixed(2)} km/h
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Overall speed
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Total Calories
+                      </CardTitle>
+                      <Flame className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {performanceData.totalCalories.toLocaleString()}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Calories burned
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">
+                        Total Steps
+                      </CardTitle>
+                      <Activity className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {performanceData.totalSteps.toLocaleString()}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {summary.totalGPSPoints.toLocaleString()} GPS points
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Detailed Metrics */}
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                  <CardHeader>
+                    <CardTitle className="text-gray-900 dark:text-white">
+                      Performance Overview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">
+                            Total Distance
+                          </span>
+                          <span className="text-2xl font-bold">
+                            {summary.totalDistance.toFixed(1)} km
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Average {summary.avgSessionDistance.toFixed(2)} km per
+                          session
+                        </p>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">
+                            Total Duration
+                          </span>
+                          <span className="text-2xl font-bold">
+                            {formatDuration(summary.totalDuration)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Average {formatDuration(summary.avgSessionDuration)}{" "}
+                          per session
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

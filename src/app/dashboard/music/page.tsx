@@ -48,7 +48,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   getMusicTracks,
   getGenres,
-  getMoods,
   getMusicStats,
 } from "@/lib/supabase/music-queries";
 import {
@@ -81,7 +80,6 @@ export default function MusicPage() {
   // Data state
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
-  const [moods, setMoods] = useState<string[]>([]);
   const [stats, setStats] = useState({
     totalTracks: 0,
     totalGenres: 0,
@@ -96,13 +94,11 @@ export default function MusicPage() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [genresData, moodsData, statsData] = await Promise.all([
+        const [genresData, statsData] = await Promise.all([
           getGenres(),
-          getMoods(),
           getMusicStats(),
         ]);
         setGenres(genresData);
-        setMoods(moodsData);
         setStats(statsData);
       } catch (error: unknown) {
         const err = error as Error;
@@ -391,7 +387,8 @@ export default function MusicPage() {
             <Skeleton className="h-5 w-48" />
           ) : (
             <p className="text-gray-700 dark:text-gray-300">
-              Manage your music collection ({stats.totalTracks.toLocaleString()} tracks total)
+              Manage your music collection ({stats.totalTracks.toLocaleString()}{" "}
+              tracks total)
             </p>
           )}
         </div>
@@ -628,7 +625,11 @@ export default function MusicPage() {
       </motion.div>
 
       {/* Active Filters Display */}
-      {(searchQuery || genreFilter !== "all" || moodFilter !== "all" || tempoMin || energyMin) && (
+      {(searchQuery ||
+        genreFilter !== "all" ||
+        moodFilter !== "all" ||
+        tempoMin ||
+        energyMin) && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -773,7 +774,9 @@ export default function MusicPage() {
                             variant="secondary"
                             className="text-xs"
                             style={{
-                              backgroundColor: `${getGenreColor(track.genre)}20`,
+                              backgroundColor: `${getGenreColor(
+                                track.genre
+                              )}20`,
                               color: getGenreColor(track.genre),
                               borderColor: getGenreColor(track.genre),
                             }}

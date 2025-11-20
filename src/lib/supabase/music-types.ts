@@ -123,12 +123,16 @@ export const GENRES = [
 
 // Get mood color
 export function getMoodColor(mood: string): string {
-  const moodData = MOODS.find(m => m.name.toLowerCase() === mood.toLowerCase());
+  const moodData = MOODS.find(
+    (m) => m.name.toLowerCase() === mood.toLowerCase()
+  );
   return moodData?.color || "#6B7280";
 }
 
 // Get genre color
 export function getGenreColor(genre: string): string {
-  const genreData = GENRES.find(g => g.name.toLowerCase() === genre.toLowerCase());
+  const genreData = GENRES.find(
+    (g) => g.name.toLowerCase() === genre.toLowerCase()
+  );
   return genreData?.color || "#6B7280";
 }
