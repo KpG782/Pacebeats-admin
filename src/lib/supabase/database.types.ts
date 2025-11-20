@@ -170,6 +170,7 @@ export interface Database {
       };
       listening_events: {
         Row: {
+          id: string;
           session_id: string;
           user_id: string;
           ts_start: string;
@@ -182,6 +183,7 @@ export interface Database {
           disliked: boolean | null;
         };
         Insert: {
+          id?: string;
           session_id: string;
           user_id: string;
           ts_start: string;
@@ -194,6 +196,7 @@ export interface Database {
           disliked?: boolean | null;
         };
         Update: {
+          id?: string;
           session_id?: string;
           user_id?: string;
           ts_start?: string;
@@ -281,7 +284,23 @@ export interface Database {
           end_time: string | null;
           distance_meters: number | null;
           duration_seconds: number | null;
+          run_type: string | null;
+          selected_emotion: string | null;
+          selected_playlist: string | null;
+          goal_pace_min_per_km: number | null;
+          user_height_cm: number | null;
+          user_gender: string | null;
+          total_distance_km: number | null;
+          total_steps: number | null;
           avg_pace_min_per_km: number | null;
+          avg_cadence_spm: number | null;
+          avg_heart_rate_bpm: number | null;
+          max_heart_rate_bpm: number | null;
+          min_heart_rate_bpm: number | null;
+          avg_speed_kmh: number | null;
+          gps_route_polyline: string | null;
+          gps_total_distance_m: number | null;
+          gps_accuracy_avg_m: number | null;
           avg_heart_rate: number | null;
           calories_burned: number | null;
           route_polyline: string | null;
@@ -296,7 +315,23 @@ export interface Database {
           end_time?: string | null;
           distance_meters?: number | null;
           duration_seconds?: number | null;
+          run_type?: string | null;
+          selected_emotion?: string | null;
+          selected_playlist?: string | null;
+          goal_pace_min_per_km?: number | null;
+          user_height_cm?: number | null;
+          user_gender?: string | null;
+          total_distance_km?: number | null;
+          total_steps?: number | null;
           avg_pace_min_per_km?: number | null;
+          avg_cadence_spm?: number | null;
+          avg_heart_rate_bpm?: number | null;
+          max_heart_rate_bpm?: number | null;
+          min_heart_rate_bpm?: number | null;
+          avg_speed_kmh?: number | null;
+          gps_route_polyline?: string | null;
+          gps_total_distance_m?: number | null;
+          gps_accuracy_avg_m?: number | null;
           avg_heart_rate?: number | null;
           calories_burned?: number | null;
           route_polyline?: string | null;
@@ -311,7 +346,23 @@ export interface Database {
           end_time?: string | null;
           distance_meters?: number | null;
           duration_seconds?: number | null;
+          run_type?: string | null;
+          selected_emotion?: string | null;
+          selected_playlist?: string | null;
+          goal_pace_min_per_km?: number | null;
+          user_height_cm?: number | null;
+          user_gender?: string | null;
+          total_distance_km?: number | null;
+          total_steps?: number | null;
           avg_pace_min_per_km?: number | null;
+          avg_cadence_spm?: number | null;
+          avg_heart_rate_bpm?: number | null;
+          max_heart_rate_bpm?: number | null;
+          min_heart_rate_bpm?: number | null;
+          avg_speed_kmh?: number | null;
+          gps_route_polyline?: string | null;
+          gps_total_distance_m?: number | null;
+          gps_accuracy_avg_m?: number | null;
           avg_heart_rate?: number | null;
           calories_burned?: number | null;
           route_polyline?: string | null;

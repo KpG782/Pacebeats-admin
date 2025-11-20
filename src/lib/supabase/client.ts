@@ -11,34 +11,32 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    "Missing Supabase environment variables. Please check your .env file."
+    "Missing Supabase environment variables. Please check your .env.local file."
   );
 }
 
 /**
- * Create a new Supabase client instance
- * Useful for creating fresh client instances when needed
+ * Single Supabase client instance (Singleton)
+ * This prevents multiple GoTrueClient instances
  */
-export function createClient() {
-  return createSupabaseClient(supabaseUrl!, supabaseAnonKey!, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-    realtime: {
-      params: {
-        eventsPerSecond: 10,
-      },
-    },
-  });
-}
+export const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 /**
- * Supabase client for browser-side operations
- * This client respects Row Level Security (RLS) policies
+ * Deprecated: Use 'supabase' instead
+ * @deprecated
  */
-export const supabase = createClient();
+export function createClient() {
+  console.warn(
+    "⚠️ createClient() is deprecated. Use 'supabase' singleton instead."
+  );
+  return supabase;
+}
 
 /**
  * Create a Supabase client for server-side rendering

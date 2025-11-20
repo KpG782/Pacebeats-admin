@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -45,6 +45,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Activity,
   Download,
   Calendar as CalendarIcon,
@@ -55,71 +65,202 @@ import {
   Eye,
   Trash2,
 } from "lucide-react";
-import {
-  enhancedMockSessions,
-  getActiveSessions,
-} from "@/lib/enhanced-session-data";
-import { RunningSession } from "@/lib/types/session";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
+import { checkDatabaseStructure } from "@/lib/supabase/diagnostics";
+import {
+  getAllSessions,
+  deleteSession,
+  SessionData,
+} from "@/lib/supabase/session-queries";
+
+// Database types for listening_events (legacy, not used)
+interface ListeningEvent {
+  id: string;
+  session_id: string;
+  user_id: string;
+  track_id: string;
+  played_ms: number | null;
+  completed: boolean | null;
+  skipped: boolean | null;
+  liked: boolean | null;
+  disliked: boolean | null;
+  ts_start: string;
+  ts_end: string | null;
+}
 
 export default function SessionsPage() {
   const router = useRouter();
   const { toast } = useToast();
+
+  const [sessions, setSessions] = useState<SessionData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [date, setDate] = useState<Date>();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+
+  // Fetch sessions using the helper function
+  const fetchSessions = useCallback(async () => {
+    setLoading(true);
+    try {
+      console.log("🔍 Fetching sessions...");
+
+      const sessionsData = await getAllSessions();
+
+      console.log(`✅ Loaded ${sessionsData.length} sessions`);
+      setSessions(sessionsData);
+
+      // Show info if no sessions found
+      if (sessionsData.length === 0) {
+        toast({
+          title: "No Sessions Found",
+          description:
+            "No running sessions found in the database. Sessions will appear here once users complete runs.",
+        });
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("❌ Error fetching sessions:", {
+        message: err?.message,
+        name: err?.name,
+        stack: err?.stack,
+      });
+      toast({
+        title: "Error Loading Sessions",
+        description:
+          err?.message || "Failed to fetch sessions. Please check your database connection.",
+        variant: "destructive",
+      });
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    // Run diagnostics on first load
+    checkDatabaseStructure();
+    fetchSessions();
+  }, [fetchSessions]);
 
   // Format helper functions
-  const formatDuration = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
+  const formatDuration = (minutes: number) => {
+    if (minutes < 1) return "< 1m";
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
     if (hrs > 0) return `${hrs}h ${mins}m`;
     return `${mins}m`;
   };
 
-  const formatDistance = (meters: number) => {
-    return (meters / 1000).toFixed(2) + " km";
+  const formatTime = (ms: number) => {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  // Filter sessions based on status
-  const filteredData = enhancedMockSessions.filter((session) => {
-    if (statusFilter === "all") return true;
-    return session.status === statusFilter;
+  // Filter sessions based on status and date
+  const filteredData = sessions.filter((session) => {
+    // Status filter
+    if (statusFilter !== "all" && session.status !== statusFilter) {
+      return false;
+    }
+
+    // Date filter
+    if (date) {
+      const sessionDate = new Date(session.started_at);
+      if (
+        sessionDate.getFullYear() !== date.getFullYear() ||
+        sessionDate.getMonth() !== date.getMonth() ||
+        sessionDate.getDate() !== date.getDate()
+      ) {
+        return false;
+      }
+    }
+
+    return true;
   });
+
+  // Calculate stats
+  const totalSessions = sessions.length;
+  const activeSessions = sessions.filter((s) => s.status === "active").length;
+  const completedSessions = sessions.filter(
+    (s) => s.status === "completed"
+  ).length;
+  const totalSongs = sessions.reduce((sum, s) => sum + s.total_songs, 0);
+  const totalLiked = sessions.reduce((sum, s) => sum + s.liked_songs, 0);
 
   const handleViewDetails = (sessionId: string) => {
     router.push(`/dashboard/sessions/${sessionId}`);
   };
 
-  const handleDeleteSession = (sessionId: string) => {
-    toast({
-      title: "Session Deleted",
-      description: `Session ${sessionId} has been deleted successfully.`,
-      variant: "default",
-    });
+  const handleDeleteClick = (sessionId: string) => {
+    setSessionToDelete(sessionId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!sessionToDelete) return;
+
+    try {
+      await deleteSession(sessionToDelete);
+
+      toast({
+        title: "Session Deleted",
+        description: "All listening events for this session have been deleted.",
+      });
+
+      // Refresh sessions
+      fetchSessions();
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error deleting session:", err);
+      toast({
+        title: "Error",
+        description:
+          err?.message || "Failed to delete session. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setSessionToDelete(null);
+    }
   };
 
   const handleExportCSV = () => {
     const headers = [
       "Session ID",
-      "User",
-      "Started At",
-      "Duration",
-      "Distance",
+      "User Email",
+      "Username",
+      "Start Time",
+      "End Time",
+      "Duration (minutes)",
+      "Total Songs",
+      "Completed",
+      "Skipped",
+      "Liked",
+      "Disliked",
+      "Total Play Time",
       "Status",
-      "Calories",
     ];
+
     const rows = filteredData.map((session) => [
-      session.id,
+      session.session_id,
+      session.user_email,
       session.user_name,
-      new Date(session.started_at).toLocaleString(),
-      formatDuration(session.duration_seconds),
-      formatDistance(session.total_distance_meters),
+      session.started_at,
+      session.ended_at,
+      session.duration_minutes,
+      session.total_songs,
+      session.completed_songs,
+      session.skipped_songs,
+      session.liked_songs,
+      session.disliked_songs,
+      formatTime(session.total_time_ms),
       session.status,
-      session.calories_burned || "N/A",
     ]);
 
     const csvContent =
@@ -129,7 +270,10 @@ export default function SessionsPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `sessions_${new Date().toISOString()}.csv`);
+    link.setAttribute(
+      "download",
+      `sessions_${new Date().toISOString().split("T")[0]}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -140,9 +284,9 @@ export default function SessionsPage() {
     });
   };
 
-  const columns: ColumnDef<RunningSession>[] = [
+  const columns: ColumnDef<SessionData>[] = [
     {
-      accessorKey: "id",
+      accessorKey: "session_id",
       header: ({ column }) => {
         return (
           <Button
@@ -156,7 +300,9 @@ export default function SessionsPage() {
         );
       },
       cell: ({ row }) => (
-        <span className="font-mono text-sm">{row.getValue("id")}</span>
+        <span className="font-mono text-xs">
+          {(row.getValue("session_id") as string).substring(0, 8)}...
+        </span>
       ),
     },
     {
@@ -213,16 +359,16 @@ export default function SessionsPage() {
       },
     },
     {
-      accessorKey: "duration_seconds",
+      accessorKey: "duration_minutes",
       header: "Duration",
       cell: ({ row }) => (
         <span className="font-semibold text-primary">
-          {formatDuration(row.getValue("duration_seconds"))}
+          {formatDuration(row.getValue("duration_minutes"))}
         </span>
       ),
     },
     {
-      accessorKey: "total_distance_meters",
+      accessorKey: "total_songs",
       header: ({ column }) => {
         return (
           <Button
@@ -230,28 +376,33 @@ export default function SessionsPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="hover:bg-gray-100 dark:hover:bg-gray-800"
           >
-            Distance
+            Songs
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
       },
       cell: ({ row }) => (
-        <span className="text-sm font-medium">
-          {formatDistance(row.getValue("total_distance_meters"))}
-        </span>
+        <div className="text-center">
+          <div className="text-sm font-medium">{row.original.total_songs}</div>
+          <div className="text-xs text-gray-500">
+            {row.original.completed_songs} completed
+          </div>
+        </div>
       ),
     },
     {
-      accessorKey: "calories_burned",
-      header: "Calories",
-      cell: ({ row }) => {
-        const calories = row.getValue("calories_burned") as number | undefined;
-        return (
-          <span className="text-sm">
-            {calories ? `${calories} kcal` : "N/A"}
-          </span>
-        );
-      },
+      accessorKey: "liked_songs",
+      header: "Engagement",
+      cell: ({ row }) => (
+        <div className="text-sm">
+          <div className="flex items-center gap-1 text-green-600">
+            👍 {row.original.liked_songs}
+          </div>
+          <div className="flex items-center gap-1 text-red-600">
+            👎 {row.original.disliked_songs}
+          </div>
+        </div>
+      ),
     },
     {
       accessorKey: "status",
@@ -303,11 +454,15 @@ export default function SessionsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleViewDetails(session.id)}>
+              <DropdownMenuItem
+                onClick={() => handleViewDetails(session.session_id)}
+              >
                 <Eye className="mr-2 h-4 w-4" />
                 View Details
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDeleteSession(session.id)}>
+              <DropdownMenuItem
+                onClick={() => handleDeleteClick(session.session_id)}
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete Session
               </DropdownMenuItem>
@@ -333,6 +488,19 @@ export default function SessionsPage() {
       globalFilter,
     },
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">
+            Loading sessions...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -374,7 +542,7 @@ export default function SessionsPage() {
                   Total Sessions
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {enhancedMockSessions.length}
+                  {totalSessions}
                 </p>
               </div>
               <Activity className="h-8 w-8 text-primary opacity-50" />
@@ -390,7 +558,7 @@ export default function SessionsPage() {
                   Active Now
                 </p>
                 <p className="text-2xl font-bold text-green-600">
-                  {getActiveSessions().length}
+                  {activeSessions}
                 </p>
               </div>
               <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
@@ -406,10 +574,7 @@ export default function SessionsPage() {
                   Completed
                 </p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {
-                    enhancedMockSessions.filter((s) => s.status === "completed")
-                      .length
-                  }
+                  {completedSessions}
                 </p>
               </div>
             </div>
@@ -421,14 +586,24 @@ export default function SessionsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Cancelled
+                  Total Songs
                 </p>
-                <p className="text-2xl font-bold text-red-600">
-                  {
-                    enhancedMockSessions.filter((s) => s.status === "cancelled")
-                      .length
-                  }
+                <p className="text-2xl font-bold text-purple-600">
+                  {totalSongs}
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Liked Songs
+                </p>
+                <p className="text-2xl font-bold text-pink-600">{totalLiked}</p>
               </div>
             </div>
           </CardContent>
@@ -460,8 +635,6 @@ export default function SessionsPage() {
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="paused">Paused</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
         <Popover>
@@ -520,7 +693,9 @@ export default function SessionsPage() {
                       <TableRow
                         key={row.id}
                         className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                        onClick={() => handleViewDetails(row.original.id)}
+                        onClick={() =>
+                          handleViewDetails(row.original.session_id)
+                        }
                       >
                         {row.getVisibleCells().map((cell) => (
                           <TableCell
@@ -556,6 +731,28 @@ export default function SessionsPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Session</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this session? This action cannot
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

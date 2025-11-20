@@ -33,9 +33,7 @@ export function LoadingSpinner({
   const content = (
     <div className="flex flex-col items-center justify-center gap-4">
       {variant === "default" && (
-        <Loader2
-          className={`${sizeClasses[size]} animate-spin text-primary`}
-        />
+        <Loader2 className={`${sizeClasses[size]} animate-spin text-primary`} />
       )}
 
       {variant === "music" && (

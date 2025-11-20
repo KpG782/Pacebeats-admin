@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -30,11 +31,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  getSessionById,
-  getGPSPointsBySessionId,
-  getHeartRateBySessionId,
-  getMusicBySessionId,
-} from "@/lib/enhanced-session-data";
+  getSessionDetail,
+  type SessionDetail,
+} from "@/lib/supabase/session-queries";
+import { useToast } from "@/components/ui/use-toast";
 
 interface SessionDetailPageProps {
   params: {
@@ -44,7 +44,55 @@ interface SessionDetailPageProps {
 
 export default function SessionDetailPage({ params }: SessionDetailPageProps) {
   const router = useRouter();
-  const session = getSessionById(params.id);
+  const { toast } = useToast();
+  const [session, setSession] = useState<SessionDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadSessionData() {
+      setLoading(true);
+
+      try {
+        const sessionDetail = await getSessionDetail(params.id);
+
+        if (!sessionDetail) {
+          toast({
+            title: "Not Found",
+            description: "Session not found in database.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        setSession(sessionDetail);
+        console.log("✅ Session loaded:", sessionDetail);
+      } catch (error: unknown) {
+        const err = error as Error;
+        console.error("Error loading session:", err);
+        toast({
+          title: "Error",
+          description: "Failed to load session details.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadSessionData();
+  }, [params.id, toast]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading session...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!session) {
     return (
@@ -55,17 +103,23 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
           </Button>
           <h1 className="text-2xl font-bold">Session Not Found</h1>
         </div>
-        <p>The requested session could not be found.</p>
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-muted-foreground">
+              The requested session could not be found.
+            </p>
+            <div className="flex justify-center mt-4">
+              <Button onClick={() => router.back()}>Back to Sessions</Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  const gpsPoints = getGPSPointsBySessionId(params.id);
-  const heartRates = getHeartRateBySessionId(params.id);
-  const musicTracks = getMusicBySessionId(params.id);
-
   // Format functions
-  const formatDuration = (seconds: number) => {
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return "0s";
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -73,14 +127,10 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
     return `${mins}m ${secs}s`;
   };
 
-  const formatPace = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")} /km`;
-  };
-
-  const formatDistance = (meters: number) => {
-    return (meters / 1000).toFixed(2) + " km";
+  const formatTime = (ms: number) => {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const formatDate = (date: string) => {
@@ -112,13 +162,14 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold">Session {session.id}</h1>
+              <h1 className="text-3xl font-bold">Session Details</h1>
               <Badge className={getStatusColor(session.status)}>
                 {session.status.toUpperCase()}
               </Badge>
             </div>
             <p className="text-muted-foreground mt-1">
-              {session.user_name} • {formatDate(session.started_at)}
+              {session.user_name} ({session.user_email}) •{" "}
+              {formatDate(session.started_at)}
             </p>
           </div>
         </div>
@@ -143,17 +194,13 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Distance</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Songs</CardTitle>
+            <Music className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatDistance(session.total_distance_meters)}
-            </div>
+            <div className="text-2xl font-bold">{session.total_songs}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {session.steps_count
-                ? `${session.steps_count.toLocaleString()} steps`
-                : "No step data"}
+              {session.completed_songs} completed
             </p>
           </CardContent>
         </Card>
@@ -168,271 +215,105 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
               {formatDuration(session.duration_seconds)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Avg Pace: {formatPace(session.avg_pace_per_km)}
+              Total play time: {formatTime(session.total_time_ms)}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Heart Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">Engagement</CardTitle>
             <Heart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {session.avg_heart_rate || "N/A"}{" "}
-              {session.avg_heart_rate && "bpm"}
+            <div className="flex items-center gap-2">
+              <div className="text-2xl font-bold text-green-600">
+                👍 {session.liked_songs}
+              </div>
+              <div className="text-2xl font-bold text-red-600">
+                👎 {session.disliked_songs}
+              </div>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Max: {session.max_heart_rate || "N/A"} bpm
+              {session.skipped_songs} skipped
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Calories</CardTitle>
+            <CardTitle className="text-sm font-medium">Status</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {session.calories_burned || "N/A"}{" "}
-              {session.calories_burned && "kcal"}
+            <div className="text-2xl font-bold capitalize">
+              {session.status}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {session.weather_condition || "No weather data"}
-              {session.temperature ? ` • ${session.temperature}°C` : ""}
+              {session.status === "active"
+                ? "Session in progress"
+                : "Session completed"}
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Tabbed Content */}
-      <Tabs defaultValue="route" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="route">
-            <MapPin className="h-4 w-4 mr-2" />
-            Route & GPS
-          </TabsTrigger>
-          <TabsTrigger value="heartrate">
-            <Heart className="h-4 w-4 mr-2" />
-            Heart Rate
-          </TabsTrigger>
+      <Tabs defaultValue="music" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="music">
             <Music className="h-4 w-4 mr-2" />
-            Music
+            Listening Events
           </TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="route" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>GPS Route</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-muted rounded-lg h-[400px] flex items-center justify-center">
-                <div className="text-center space-y-2">
-                  <MapPin className="h-12 w-12 mx-auto text-muted-foreground" />
-                  <p className="text-muted-foreground">GPS Map Visualization</p>
-                  <p className="text-sm text-muted-foreground">
-                    (Leaflet integration pending)
-                  </p>
-                </div>
-              </div>
-              <Separator className="my-4" />
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium">Start Location</p>
-                  <p className="text-sm text-muted-foreground">
-                    {session.start_location
-                      ? `${session.start_location.lat.toFixed(
-                          4
-                        )}, ${session.start_location.lng.toFixed(4)}`
-                      : "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">End Location</p>
-                  <p className="text-sm text-muted-foreground">
-                    {session.end_location
-                      ? `${session.end_location.lat.toFixed(
-                          4
-                        )}, ${session.end_location.lng.toFixed(4)}`
-                      : "N/A"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {gpsPoints.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>GPS Points ({gpsPoints.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Timestamp</TableHead>
-                      <TableHead>Latitude</TableHead>
-                      <TableHead>Longitude</TableHead>
-                      <TableHead>Altitude</TableHead>
-                      <TableHead>Accuracy</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {gpsPoints.slice(0, 10).map((point) => (
-                      <TableRow key={point.id}>
-                        <TableCell>
-                          {new Date(point.timestamp).toLocaleTimeString()}
-                        </TableCell>
-                        <TableCell>{point.latitude.toFixed(5)}</TableCell>
-                        <TableCell>{point.longitude.toFixed(5)}</TableCell>
-                        <TableCell>
-                          {point.altitude ? `${point.altitude}m` : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          {point.accuracy ? `±${point.accuracy}m` : "N/A"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {gpsPoints.length > 10 && (
-                  <p className="text-sm text-muted-foreground mt-2 text-center">
-                    Showing 10 of {gpsPoints.length} GPS points
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="heartrate" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Heart Rate Chart</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-muted rounded-lg h-[400px] flex items-center justify-center">
-                <div className="text-center space-y-2">
-                  <Heart className="h-12 w-12 mx-auto text-muted-foreground" />
-                  <p className="text-muted-foreground">Heart Rate Chart</p>
-                  <p className="text-sm text-muted-foreground">
-                    (Recharts integration pending)
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {heartRates.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Heart Rate Data ({heartRates.length} readings)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">Average</p>
-                    <p className="text-2xl font-bold">
-                      {session.avg_heart_rate} bpm
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">Maximum</p>
-                    <p className="text-2xl font-bold">
-                      {session.max_heart_rate} bpm
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">Minimum</p>
-                    <p className="text-2xl font-bold">
-                      {Math.min(...heartRates.map((hr) => hr.heart_rate))} bpm
-                    </p>
-                  </div>
-                </div>
-                <Separator className="my-4" />
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Time</TableHead>
-                      <TableHead>Heart Rate</TableHead>
-                      <TableHead>Zone</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {heartRates.map((hr) => {
-                      const zone =
-                        hr.heart_rate > 170
-                          ? "Maximum"
-                          : hr.heart_rate > 150
-                          ? "Hard"
-                          : hr.heart_rate > 130
-                          ? "Moderate"
-                          : "Light";
-                      return (
-                        <TableRow key={hr.id}>
-                          <TableCell>
-                            {new Date(hr.timestamp).toLocaleTimeString()}
-                          </TableCell>
-                          <TableCell>{hr.heart_rate} bpm</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{zone}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
         <TabsContent value="music" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Music Played During Session</CardTitle>
+              <CardTitle>
+                Music Played ({session.music_history.length})
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {musicTracks.length > 0 ? (
+              {session.music_history.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Time</TableHead>
                       <TableHead>Track</TableHead>
                       <TableHead>Artist</TableHead>
                       <TableHead>Duration</TableHead>
+                      <TableHead>BPM</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Engagement</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {musicTracks.map((track) => (
+                    {session.music_history.map((track) => (
                       <TableRow key={track.id}>
-                        <TableCell>
-                          {new Date(track.played_at).toLocaleTimeString()}
-                        </TableCell>
                         <TableCell className="font-medium">
-                          {track.track_name}
+                          {track.track_title}
                         </TableCell>
-                        <TableCell>{track.artist_name}</TableCell>
+                        <TableCell>{track.track_artist || "Unknown"}</TableCell>
                         <TableCell>
-                          {Math.floor(track.duration_ms / 60000)}:
-                          {((track.duration_ms % 60000) / 1000)
-                            .toFixed(0)
-                            .padStart(2, "0")}
+                          {track.played_duration_seconds
+                            ? formatTime(track.played_duration_seconds * 1000)
+                            : "N/A"}
                         </TableCell>
+                        <TableCell>{track.track_bpm || "-"}</TableCell>
                         <TableCell>
                           <Badge
-                            variant={track.completed ? "default" : "outline"}
+                            variant={track.was_skipped ? "outline" : "default"}
                           >
-                            {track.completed ? "Completed" : "Skipped"}
+                            {track.was_skipped ? "Skipped" : "Completed"}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {track.was_liked && (
+                              <span className="text-green-600">👍</span>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -459,12 +340,26 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium">Session ID</p>
-                  <p className="text-sm text-muted-foreground">{session.id}</p>
+                  <p className="text-sm text-muted-foreground font-mono">
+                    {session.session_id}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium">User ID</p>
+                  <p className="text-sm font-medium">User</p>
                   <p className="text-sm text-muted-foreground">
-                    {session.user_id}
+                    {session.user_name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Email</p>
+                  <p className="text-sm text-muted-foreground">
+                    {session.user_email}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Status</p>
+                  <p className="text-sm text-muted-foreground capitalize">
+                    {session.status}
                   </p>
                 </div>
                 <div>
@@ -481,47 +376,45 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
                       : "In Progress"}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Status</p>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {session.status}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Created At</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDate(session.created_at)}
-                  </p>
-                </div>
               </div>
 
               <Separator />
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium">Weather</p>
+                  <p className="text-sm font-medium">Total Songs</p>
                   <p className="text-sm text-muted-foreground">
-                    {session.weather_condition || "Not recorded"}
+                    {session.total_songs}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Temperature</p>
+                  <p className="text-sm font-medium">Completed Songs</p>
                   <p className="text-sm text-muted-foreground">
-                    {session.temperature
-                      ? `${session.temperature}°C`
-                      : "Not recorded"}
+                    {session.completed_songs}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium">GPS Points</p>
+                  <p className="text-sm font-medium">Skipped Songs</p>
                   <p className="text-sm text-muted-foreground">
-                    {gpsPoints.length} recorded
+                    {session.skipped_songs}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Heart Rate Readings</p>
+                  <p className="text-sm font-medium">Engagement</p>
                   <p className="text-sm text-muted-foreground">
-                    {heartRates.length} recorded
+                    👍 {session.liked_songs} • 👎 {session.disliked_songs}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Total Duration</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatDuration(session.duration_seconds)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Total Play Time</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatTime(session.total_time_ms)}
                   </p>
                 </div>
               </div>

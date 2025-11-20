@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -64,42 +64,44 @@ export default function MusicPage() {
   const [bpmFilter, setBpmFilter] = useState<string>("all");
   const [energyFilter, setEnergyFilter] = useState<string>("all");
 
-  // Filter music based on search and filters
-  const filteredMusic = enhancedMusicTracks.filter((track) => {
-    const matchesSearch =
-      track.track_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      track.artist_name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGenre = genreFilter === "all" || track.genre === genreFilter;
-    const matchesMood = moodFilter === "all" || track.mood === moodFilter;
+  // Memoize filtered music for better performance
+  const filteredMusic = useMemo(() => {
+    return enhancedMusicTracks.filter((track) => {
+      const matchesSearch =
+        track.track_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        track.artist_name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesGenre = genreFilter === "all" || track.genre === genreFilter;
+      const matchesMood = moodFilter === "all" || track.mood === moodFilter;
 
-    // BPM filter
-    let matchesBPM = true;
-    if (bpmFilter !== "all") {
-      const [min, max] = bpmFilter.split("-").map(Number);
-      if (max) {
-        matchesBPM = track.bpm >= min && track.bpm <= max;
-      } else {
-        matchesBPM = track.bpm >= min;
+      // BPM filter
+      let matchesBPM = true;
+      if (bpmFilter !== "all") {
+        const [min, max] = bpmFilter.split("-").map(Number);
+        if (max) {
+          matchesBPM = track.bpm >= min && track.bpm <= max;
+        } else {
+          matchesBPM = track.bpm >= min;
+        }
       }
-    }
 
-    // Energy filter
-    let matchesEnergy = true;
-    if (energyFilter !== "all") {
-      const energyLevel = parseInt(energyFilter);
-      matchesEnergy =
-        track.energy_level >= energyLevel &&
-        track.energy_level < energyLevel + 3;
-    }
+      // Energy filter
+      let matchesEnergy = true;
+      if (energyFilter !== "all") {
+        const energyLevel = parseInt(energyFilter);
+        matchesEnergy =
+          track.energy_level >= energyLevel &&
+          track.energy_level < energyLevel + 3;
+      }
 
-    return (
-      matchesSearch &&
-      matchesGenre &&
-      matchesMood &&
-      matchesBPM &&
-      matchesEnergy
-    );
-  });
+      return (
+        matchesSearch &&
+        matchesGenre &&
+        matchesMood &&
+        matchesBPM &&
+        matchesEnergy
+      );
+    });
+  }, [searchQuery, genreFilter, moodFilter, bpmFilter, energyFilter]);
 
   const handleViewDetails = (trackId: string) => {
     router.push(`/dashboard/music/${trackId}`);
@@ -156,125 +158,143 @@ export default function MusicPage() {
     });
   };
 
-  // Calculate stats
-  const totalPlays = filteredMusic.reduce(
-    (sum, track) => sum + track.total_plays,
-    0
-  );
-  const avgCompletionRate =
-    filteredMusic.reduce(
-      (sum, track) => sum + (track.avg_completion_rate || 0),
+  // Calculate stats - memoized for performance
+  const stats = useMemo(() => {
+    const totalPlays = filteredMusic.reduce(
+      (sum, track) => sum + track.total_plays,
       0
-    ) / filteredMusic.length;
-  const activeTracks = filteredMusic.filter((t) => t.is_active).length;
+    );
+    const avgCompletionRate =
+      filteredMusic.length > 0
+        ? filteredMusic.reduce(
+            (sum, track) => sum + (track.avg_completion_rate || 0),
+            0
+          ) / filteredMusic.length
+        : 0;
+    const activeTracks = filteredMusic.filter((t) => t.is_active).length;
 
-  const columns: ColumnDef<MusicTrack>[] = [
-    {
-      accessorKey: "track_name",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
+    return { totalPlays, avgCompletionRate, activeTracks };
+  }, [filteredMusic]);
+
+  const columns: ColumnDef<MusicTrack>[] = useMemo(
+    () => [
+      {
+        accessorKey: "track_name",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Title
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => (
+          <div
+            className="cursor-pointer"
+            onClick={() => handleViewDetails(row.original.id)}
           >
-            Title
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => (
-        <div
-          className="cursor-pointer"
-          onClick={() => handleViewDetails(row.original.id)}
-        >
-          <div className="font-medium text-gray-900 dark:text-white">
-            {row.original.track_name}
+            <div className="font-medium text-gray-900 dark:text-white">
+              {row.original.track_name}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              {row.original.artist_name}
+            </div>
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            {row.original.artist_name}
-          </div>
-        </div>
-      ),
-    },
-    {
-      accessorKey: "genre",
-      header: "Genre",
-      cell: ({ row }) => {
-        const genre = enhancedGenres.find((g) => g.name === row.original.genre);
-        return (
-          <Badge
-            variant="secondary"
-            style={{ borderColor: genre?.color, color: genre?.color }}
-          >
-            {row.original.genre}
-          </Badge>
-        );
+        ),
       },
-    },
-    {
-      accessorKey: "mood",
-      header: "Mood",
-      cell: ({ row }) => {
-        const mood = enhancedMoods.find((m) => m.name === row.original.mood);
-        return (
-          <Badge variant="outline" style={{ color: mood?.color }}>
-            {row.original.mood}
-          </Badge>
-        );
+      {
+        accessorKey: "genre",
+        header: "Genre",
+        cell: ({ row }) => {
+          const genre = enhancedGenres.find(
+            (g) => g.name === row.original.genre
+          );
+          return (
+            <Badge
+              variant="secondary"
+              style={{ borderColor: genre?.color, color: genre?.color }}
+            >
+              {row.original.genre}
+            </Badge>
+          );
+        },
       },
-    },
-    {
-      accessorKey: "bpm",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            BPM
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
+      {
+        accessorKey: "mood",
+        header: "Mood",
+        cell: ({ row }) => {
+          const mood = enhancedMoods.find((m) => m.name === row.original.mood);
+          return (
+            <Badge variant="outline" style={{ color: mood?.color }}>
+              {row.original.mood}
+            </Badge>
+          );
+        },
       },
-      cell: ({ row }) => <span>{row.original.bpm}</span>,
-    },
-    {
-      accessorKey: "duration_ms",
-      header: "Duration",
-      cell: ({ row }) => {
-        const ms = row.original.duration_ms;
-        const minutes = Math.floor(ms / 60000);
-        const seconds = ((ms % 60000) / 1000).toFixed(0).padStart(2, "0");
-        return (
-          <span>
-            {minutes}:{seconds}
+      {
+        accessorKey: "bpm",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              BPM
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => <span>{row.original.bpm}</span>,
+      },
+      {
+        accessorKey: "duration_ms",
+        header: "Duration",
+        cell: ({ row }) => {
+          const ms = row.original.duration_ms;
+          const minutes = Math.floor(ms / 60000);
+          const seconds = ((ms % 60000) / 1000).toFixed(0).padStart(2, "0");
+          return (
+            <span>
+              {minutes}:{seconds}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "total_plays",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Plays
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => (
+          <span className="font-semibold text-primary">
+            {row.original.total_plays.toLocaleString()}
           </span>
-        );
+        ),
       },
-    },
-    {
-      accessorKey: "total_plays",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            Plays
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => (
-        <span className="font-semibold text-primary">
-          {row.original.total_plays.toLocaleString()}
-        </span>
-      ),
-    },
-  ];
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const table = useReactTable({
     data: filteredMusic,
@@ -333,21 +353,21 @@ export default function MusicPage() {
         />
         <StatsCard
           title="Total Plays"
-          value={totalPlays.toLocaleString()}
+          value={stats.totalPlays.toLocaleString()}
           icon={PlayCircle}
           trend="up"
           trendValue="+8.5%"
         />
         <StatsCard
           title="Active Tracks"
-          value={activeTracks.toString()}
+          value={stats.activeTracks.toString()}
           icon={TrendingUp}
           trend="up"
           trendValue="+5%"
         />
         <StatsCard
           title="Avg Completion"
-          value={`${avgCompletionRate.toFixed(1)}%`}
+          value={`${stats.avgCompletionRate.toFixed(1)}%`}
           icon={BarChart3}
           trend="up"
           trendValue="+3.2%"

@@ -31,7 +31,7 @@ export interface User {
   weight_unit: string; // default: 'kg'
 }
 
-export type UserInsert = Omit<User, 'id' | 'created_at'> & {
+export type UserInsert = Omit<User, "id" | "created_at"> & {
   id?: string;
   created_at?: string;
 };
@@ -64,7 +64,7 @@ export interface Music {
   mood: string | null; // varchar
 }
 
-export type MusicInsert = Omit<Music, 'track_id'> & {
+export type MusicInsert = Omit<Music, "track_id"> & {
   track_id?: string;
 };
 

@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -37,20 +38,156 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  getUserById,
-  getSessionsByUserId,
-  getActivitiesByUserId,
-} from "@/lib/enhanced-mock-data";
+import { supabase } from "@/lib/supabase/client";
 import { format } from "date-fns";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useToast } from "@/components/ui/use-toast";
+
+// Database types
+interface DatabaseUser {
+  id: string;
+  email: string;
+  username: string | null;
+  role: "user" | "admin" | "moderator";
+  profile_picture_url: string | null;
+  location: string | null;
+  phone_number: string | null;
+  date_of_birth: string | null;
+  spotify_connected: boolean;
+  spotify_user_id: string | null;
+  total_runs: number;
+  total_distance_km: number;
+  total_duration_minutes: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RunningSession {
+  id: string;
+  user_id: string;
+  start_time: string;
+  end_time: string | null;
+  distance_meters: number | null;
+  duration_seconds: number | null;
+  avg_pace_min_per_km: number | null;
+  avg_heart_rate: number | null;
+  max_heart_rate: number | null;
+  calories_burned: number | null;
+  status: "active" | "paused" | "completed" | "cancelled";
+  created_at: string;
+}
 
 export default function UserDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const user = getUserById(params.id);
-  const sessions = getSessionsByUserId(params.id);
-  const activities = getActivitiesByUserId(params.id);
+  const { toast } = useToast();
 
-  if (!user) {
+  const [user, setUser] = useState<DatabaseUser | null>(null);
+  const [sessions, setSessions] = useState<RunningSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    fetchUserData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id]);
+
+  const fetchUserData = async () => {
+    try {
+      setLoading(true);
+      console.log(`🔍 Fetching user data for ID: ${params.id}`);
+
+      // Check if it's a mock user
+      if (params.id.startsWith("mock-")) {
+        console.log("📦 Mock user detected");
+        toast({
+          title: "Mock User",
+          description: "This is sample data. Real user details not available.",
+        });
+        setNotFound(true);
+        return;
+      }
+
+      // Fetch user details
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", params.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error("❌ Error fetching user:", userError);
+        setNotFound(true);
+        return;
+      }
+
+      console.log("✅ User data loaded:", userData.username || userData.email);
+      setUser(userData);
+
+      // Fetch user's running sessions
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from("running_sessions")
+        .select("*")
+        .eq("user_id", params.id)
+        .order("start_time", { ascending: false })
+        .limit(20);
+
+      if (sessionsError) {
+        console.error("⚠️ Error fetching sessions:", sessionsError);
+        // Don't fail if sessions error, just show empty
+        setSessions([]);
+      } else {
+        console.log(`✅ Loaded ${sessionsData?.length || 0} sessions`);
+        setSessions(sessionsData || []);
+      }
+    } catch (error) {
+      console.error("❌ Unexpected error fetching user data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load user data",
+        variant: "destructive",
+      });
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return "0:00";
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const calculateAge = (dateOfBirth: string | null) => {
+    if (!dateOfBirth) return null;
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birthDate.getDate())
+    ) {
+      age--;
+    }
+    return age;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center space-y-4">
+          <LoadingSpinner size="lg" />
+          <p className="text-gray-600 dark:text-gray-400">
+            Loading user details...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !user) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -68,11 +205,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const formatDuration = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes}:${secs.toString().padStart(2, "0")}`;
-  };
+  const age = calculateAge(user.date_of_birth);
 
   return (
     <div className="p-6 space-y-6">
@@ -140,11 +273,14 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               {/* Avatar */}
               <div className="flex-shrink-0">
                 <Avatar className="h-32 w-32 border-4 border-white dark:border-gray-800 shadow-lg">
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt={user.username} />
+                  {user.profile_picture_url ? (
+                    <img
+                      src={user.profile_picture_url}
+                      alt={user.username || user.email}
+                    />
                   ) : (
                     <div className="h-full w-full bg-primary flex items-center justify-center text-white text-4xl font-bold">
-                      {user.username.charAt(0).toUpperCase()}
+                      {(user.username || user.email).charAt(0).toUpperCase()}
                     </div>
                   )}
                 </Avatar>
@@ -155,16 +291,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {user.username}
+                      {user.username || user.email.split("@")[0]}
                     </h2>
-                    <Badge
-                      className={
-                        user.status === "active"
-                          ? "bg-green-100 text-green-900 border border-green-300 font-semibold dark:bg-green-900/30 dark:text-green-400 dark:border-green-700"
-                          : "bg-gray-200 text-gray-900 border border-gray-400 font-semibold dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600"
-                      }
-                    >
-                      {user.status}
+                    <Badge className="bg-green-100 text-green-900 border border-green-300 font-semibold dark:bg-green-900/30 dark:text-green-400 dark:border-green-700">
+                      {user.role}
                     </Badge>
                   </div>
                   <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
@@ -176,11 +306,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                       <Calendar className="h-4 w-4" />
                       Joined {format(new Date(user.created_at), "MMM dd, yyyy")}
                     </div>
-                    {user.last_login_at && (
+                    {user.location && (
                       <div className="flex items-center gap-1">
-                        <Activity className="h-4 w-4" />
-                        Last active{" "}
-                        {format(new Date(user.last_login_at), "MMM dd, yyyy")}
+                        <MapPin className="h-4 w-4" />
+                        {user.location}
                       </div>
                     )}
                   </div>
@@ -188,64 +317,37 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
 
                 {/* Profile Details */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  {user.age && (
+                  {age && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                         Age
                       </p>
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {user.age} years
+                        {age} years
                       </p>
                     </div>
                   )}
-                  {user.gender && (
+                  {user.phone_number && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        Gender
-                      </p>
-                      <p className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
-                        {user.gender}
-                      </p>
-                    </div>
-                  )}
-                  {user.height && (
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        Height
+                        Phone
                       </p>
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {user.height} {user.height_unit}
+                        {user.phone_number}
                       </p>
                     </div>
                   )}
-                  {user.weight && (
+                  {user.spotify_connected && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        Weight
+                        Spotify
                       </p>
-                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {user.weight} {user.weight_unit}
+                      <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+                        Connected
                       </p>
                     </div>
                   )}
                 </div>
-
-                {/* Running Preferences */}
-                {user.running_experience && (
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <Badge variant="outline" className="capitalize">
-                      {user.running_experience} Runner
-                    </Badge>
-                    {user.pace_band && (
-                      <Badge variant="outline">{user.pace_band}</Badge>
-                    )}
-                    {user.preferred_genres?.map((genre) => (
-                      <Badge key={genre} variant="outline">
-                        {genre}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           </CardContent>
@@ -319,10 +421,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Avg Pace
+                  Total Sessions
                 </p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                  {user.avg_pace || "N/A"}
+                  {sessions.length}
                 </p>
               </div>
               <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
@@ -341,8 +443,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       >
         <Tabs defaultValue="sessions" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="sessions">Sessions</TabsTrigger>
-            <TabsTrigger value="activity">Activity Log</TabsTrigger>
+            <TabsTrigger value="sessions">
+              Running Sessions ({sessions.length})
+            </TabsTrigger>
           </TabsList>
 
           {/* Sessions Tab */}
@@ -370,7 +473,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                         <TableRow key={session.id}>
                           <TableCell>
                             {format(
-                              new Date(session.started_at),
+                              new Date(session.start_time),
                               "MMM dd, yyyy"
                             )}
                           </TableCell>
@@ -378,15 +481,19 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                             {formatDuration(session.duration_seconds)}
                           </TableCell>
                           <TableCell>
-                            {(session.total_distance_meters / 1000).toFixed(2)}{" "}
+                            {session.distance_meters
+                              ? (session.distance_meters / 1000).toFixed(2)
+                              : "0.00"}{" "}
                             km
                           </TableCell>
                           <TableCell>
-                            {Math.floor(session.avg_pace_per_km / 60)}:
-                            {(session.avg_pace_per_km % 60)
-                              .toString()
-                              .padStart(2, "0")}{" "}
-                            /km
+                            {session.avg_pace_min_per_km
+                              ? `${Math.floor(
+                                  session.avg_pace_min_per_km / 60
+                                )}:${(session.avg_pace_min_per_km % 60)
+                                  .toString()
+                                  .padStart(2, "0")} /km`
+                              : "N/A"}
                           </TableCell>
                           <TableCell>
                             {session.avg_heart_rate ? (
@@ -426,51 +533,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 ) : (
                   <div className="text-center py-12 text-gray-600 dark:text-gray-400">
                     No sessions found for this user.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Activity Log Tab */}
-          <TabsContent value="activity">
-            <Card>
-              <CardHeader>
-                <CardTitle>Activity Log</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {activities.length > 0 ? (
-                  <div className="space-y-4">
-                    {activities.map((activity) => (
-                      <div
-                        key={activity.id}
-                        className="flex items-start gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                          <Activity className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 dark:text-white capitalize">
-                            {activity.event_type.replace("_", " ")}
-                          </p>
-                          {activity.event_data && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              {JSON.stringify(activity.event_data, null, 2)}
-                            </p>
-                          )}
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                            {format(
-                              new Date(activity.created_at),
-                              "MMM dd, yyyy 'at' h:mm a"
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-                    No activity logged for this user.
                   </div>
                 )}
               </CardContent>

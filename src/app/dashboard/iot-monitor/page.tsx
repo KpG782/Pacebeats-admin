@@ -21,10 +21,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
-import {
-  subscribeToTable,
-  unsubscribeChannel,
-} from "@/lib/supabase/client";
+import { subscribeToTable, unsubscribeChannel } from "@/lib/supabase/client";
 import {
   getActiveRunners,
   getActiveAlerts,
@@ -267,7 +264,11 @@ export default function IoTMonitorPage() {
           setAlerts((prev) =>
             prev.map((alert) =>
               alert.id === payload.new.id
-                ? { ...alert, resolved: true, resolved_at: payload.new.resolved_at }
+                ? {
+                    ...alert,
+                    resolved: true,
+                    resolved_at: payload.new.resolved_at,
+                  }
                 : alert
             )
           );
@@ -383,7 +384,9 @@ export default function IoTMonitorPage() {
       // Update local state
       setAlerts((prev) =>
         prev.map((a) =>
-          a.id === alertId ? { ...a, resolved: true, resolved_at: new Date().toISOString() } : a
+          a.id === alertId
+            ? { ...a, resolved: true, resolved_at: new Date().toISOString() }
+            : a
         )
       );
 
