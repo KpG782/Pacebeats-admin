@@ -138,8 +138,9 @@ export default function SecuritySettingsPage() {
     });
   };
 
-  const handleRevokeSession = (_sessionId: string) => {
+  const handleRevokeSession = (sessionId: string) => {
     // TODO: Implement session revoke API call
+    console.log("Revoking session:", sessionId);
     toast({
       title: "Session Revoked",
       description: "The session has been terminated",

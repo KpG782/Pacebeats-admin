@@ -3,7 +3,7 @@
  * Handles authentication and database connections
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 // Validate environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,28 +16,36 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
+ * Create a new Supabase client instance
+ * Useful for creating fresh client instances when needed
+ */
+export function createClient() {
+  return createSupabaseClient(supabaseUrl!, supabaseAnonKey!, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+  });
+}
+
+/**
  * Supabase client for browser-side operations
  * This client respects Row Level Security (RLS) policies
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+export const supabase = createClient();
 
 /**
  * Create a Supabase client for server-side rendering
  * Use this in API routes and server components
  */
 export const createServerClient = () => {
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

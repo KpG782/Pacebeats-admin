@@ -9,18 +9,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Moon, Sun } from "lucide-react";
-import { signInWithEmail, onAuthStateChange } from "@/lib/supabase/client";
+import { signInWithEmail, onAuthStateChange, createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState({ email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
@@ -38,6 +42,8 @@ export default function LoginPage() {
         }
       });
 
+      setIsCheckingAuth(false);
+      
       return () => {
         data.subscription.unsubscribe();
       };
@@ -96,41 +102,92 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Supabase authentication
-      const { user } = await signInWithEmail(email, password);
+      if (isSignUp) {
+        // Sign up new user
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/dashboard`,
+            data: {
+              role: "admin", // Store admin role in user metadata
+            },
+          },
+        });
 
-      // Store session info if remember me is checked
-      if (rememberMe) {
-        localStorage.setItem("rememberMe", "true");
+        if (error) throw error;
+
+        // Check if user already exists
+        if (data?.user?.identities?.length === 0) {
+          toast({
+            title: "User Already Exists",
+            description: "This email is already registered. Please sign in instead.",
+            variant: "destructive",
+          });
+          setIsSignUp(false);
+          setIsLoading(false);
+          return;
+        }
+
+        // Insert user into the users table
+        if (data.user) {
+          const { error: insertError } = await supabase.from("users").insert({
+            id: data.user.id,
+            email: data.user.email!,
+            full_name: data.user.email!.split("@")[0], // Default name from email
+            role: "admin",
+          });
+
+          if (insertError) {
+            console.error("Error inserting user:", insertError);
+          }
+        }
+
+        toast({
+          title: "Account Created! 🎉",
+          description: "You can now sign in with your credentials.",
+        });
+
+        // Switch to sign-in mode
+        setIsSignUp(false);
+        setIsLoading(false);
+      } else {
+        // Sign in existing user
+        const { user } = await signInWithEmail(email, password);
+
+        // Store session info if remember me is checked
+        if (rememberMe) {
+          localStorage.setItem("rememberMe", "true");
+        }
+
+        // Store user info for admin dashboard
+        localStorage.setItem(
+          "adminUser",
+          JSON.stringify({
+            id: user.id,
+            email: user.email,
+            role: user.user_metadata?.role || "admin",
+          })
+        );
+
+        toast({
+          title: "Login Successful",
+          description: `Welcome back, ${user.email}!`,
+        });
+
+        // Redirect to dashboard
+        router.push("/dashboard");
       }
-
-      // Store user info for admin dashboard
-      localStorage.setItem(
-        "adminUser",
-        JSON.stringify({
-          id: user.id,
-          email: user.email,
-          role: user.user_metadata?.role || "admin",
-        })
-      );
-
-      toast({
-        title: "Login Successful",
-        description: `Welcome back, ${user.email}!`,
-      });
-
-      // Redirect to dashboard
-      router.push("/dashboard");
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("Authentication error:", error);
 
       const errorMessage =
-        error instanceof Error ? error.message : "Invalid email or password";
+        error instanceof Error ? error.message : "Authentication failed";
 
       setErrors({ ...errors, password: errorMessage });
 
       toast({
-        title: "Login Failed",
+        title: isSignUp ? "Sign Up Failed" : "Login Failed",
         description: errorMessage,
         variant: "destructive",
       });
@@ -160,7 +217,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+    <>
+      {isCheckingAuth ? (
+        <LoadingSpinner fullScreen variant="music" text="Checking authentication..." size="xl" />
+      ) : (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -248,10 +309,12 @@ export default function LoginPage() {
             {/* Form Title */}
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Welcome Back
+                {isSignUp ? "Create Admin Account" : "Welcome Back"}
               </h1>
               <p className="text-gray-700 dark:text-gray-300">
-                Sign in to access the Admin Dashboard
+                {isSignUp
+                  ? "Sign up to create a new admin account"
+                  : "Sign in to access the Admin Dashboard"}
               </p>
             </div>
 
@@ -365,11 +428,30 @@ export default function LoginPage() {
                     }}
                     className="h-5 w-5 border-2 border-white border-t-transparent rounded-full"
                   />
+                ) : isSignUp ? (
+                  "Create Account"
                 ) : (
                   "Sign In"
                 )}
               </Button>
             </form>
+
+            {/* Sign Up Toggle */}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+                <button
+                  onClick={() => {
+                    setIsSignUp(!isSignUp);
+                    setErrors({ email: "", password: "" });
+                  }}
+                  disabled={isLoading}
+                  className="text-primary hover:text-primary/80 transition-colors font-medium"
+                >
+                  {isSignUp ? "Sign In" : "Sign Up"}
+                </button>
+              </p>
+            </div>
 
             {/* Footer */}
             <div className="mt-6 text-center">
@@ -393,5 +475,7 @@ export default function LoginPage() {
         </p>
       </motion.div>
     </div>
+      )}
+    </>
   );
 }
