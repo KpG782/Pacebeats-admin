@@ -109,13 +109,15 @@ export async function getAllSessions(): Promise<SessionData[]> {
     // Fetch all running sessions with user data
     const { data: sessions, error: sessionsError } = await supabase
       .from("running_sessions")
-      .select(`
+      .select(
+        `
         *,
         users (
           email,
           username
         )
-      `)
+      `
+      )
       .order("start_time", { ascending: false });
 
     if (sessionsError) {
@@ -138,7 +140,7 @@ export async function getAllSessions(): Promise<SessionData[]> {
 
     // Fetch music history for all sessions to calculate music stats
     const sessionIds = sessions.map((s) => s.id);
-    
+
     let musicData: Array<{
       session_id: string;
       was_skipped: boolean;
@@ -223,7 +225,8 @@ export async function getAllSessions(): Promise<SessionData[]> {
         total_steps: session.total_steps || 0,
         avg_pace_min_per_km: session.avg_pace_min_per_km,
         avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm: session.avg_heart_rate || session.avg_heart_rate_bpm,
+        avg_heart_rate_bpm:
+          session.avg_heart_rate || session.avg_heart_rate_bpm,
         max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
         min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
         avg_speed_kmh: session.avg_speed_kmh || 0,
@@ -266,13 +269,15 @@ export async function getSessionDetail(
     // Fetch main session with user data
     const { data: session, error: sessionError } = await supabase
       .from("running_sessions")
-      .select(`
+      .select(
+        `
         *,
         users (
           email,
           username
         )
-      `)
+      `
+      )
       .eq("id", sessionId)
       .single();
 
@@ -391,7 +396,11 @@ export async function getSessionDetail(
     };
 
     console.log(
-      `✅ Session detail loaded: ${musicStats.total} tracks, ${heartRateData?.length || 0} HR points, ${gpsPoints?.length || 0} GPS points, ${paceIntervals?.length || 0} intervals`
+      `✅ Session detail loaded: ${musicStats.total} tracks, ${
+        heartRateData?.length || 0
+      } HR points, ${gpsPoints?.length || 0} GPS points, ${
+        paceIntervals?.length || 0
+      } intervals`
     );
 
     return sessionDetail;
@@ -415,13 +424,15 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
   try {
     const { data: sessions, error } = await supabase
       .from("running_sessions")
-      .select(`
+      .select(
+        `
         *,
         users (
           email,
           username
         )
-      `)
+      `
+      )
       .eq("user_id", userId)
       .order("start_time", { ascending: false });
 
@@ -518,7 +529,8 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
         total_steps: session.total_steps || 0,
         avg_pace_min_per_km: session.avg_pace_min_per_km,
         avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm: session.avg_heart_rate || session.avg_heart_rate_bpm,
+        avg_heart_rate_bpm:
+          session.avg_heart_rate || session.avg_heart_rate_bpm,
         max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
         min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
         avg_speed_kmh: session.avg_speed_kmh || 0,

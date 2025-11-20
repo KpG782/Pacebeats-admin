@@ -132,7 +132,8 @@ export default function SessionsPage() {
       toast({
         title: "Error Loading Sessions",
         description:
-          err?.message || "Failed to fetch sessions. Please check your database connection.",
+          err?.message ||
+          "Failed to fetch sessions. Please check your database connection.",
         variant: "destructive",
       });
       setSessions([]);

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,333 +10,123 @@ import {
   Activity,
   Heart,
   AlertTriangle,
-  MapPin,
   Clock,
   Search,
-  Download,
-  Bell,
   Play,
   Pause,
-  RefreshCw,
+  User,
+  TrendingUp,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
-import { subscribeToTable, unsubscribeChannel } from "@/lib/supabase/client";
-import {
-  getActiveRunners,
-  getActiveAlerts,
-  resolveAlert,
-} from "@/lib/supabase/queries";
-import type { ActiveRunner, HeartRateAlert } from "@/lib/supabase/types";
+import { supabase } from "@/lib/supabase/client";
 
-// Interface for component state
-interface Runner extends ActiveRunner {
-  id: number;
-  device_model: string;
-  latitude: number | null;
-  longitude: number | null;
-  avatar_url?: string;
-  pace: number | null;
-}
-
-interface Alert {
+// Interface for runner data
+interface Runner {
   id: string;
-  user_id: string;
   username: string;
-  session_id: string;
+  email: string;
   heart_rate: number;
-  severity: "LOW" | "HIGH" | "CRITICAL";
-  message: string;
-  created_at: string;
-  resolved: boolean;
-  resolved_at: string | null;
+  pace: number;
+  status: "NORMAL" | "HIGH" | "CRITICAL" | "LOW";
+  duration_minutes: number;
+  distance_km: number;
+  last_update: string;
 }
 
-// Mock data for development/fallback - Remove or comment out when backend is ready
-const mockRunners: Runner[] = [
-  {
-    id: 1,
-    user_id: "user_001",
-    username: "john_runner",
-    heart_rate: 165,
-    pace: 5.2,
-    status: "HIGH",
-    last_update: new Date(Date.now() - 30000).toISOString(),
-    device_model: "Galaxy Watch 7",
-    latitude: 14.5995,
-    longitude: 120.9842,
-    session_id: "session_001",
-    duration_seconds: 1800,
-    distance_meters: 5000,
-    avg_pace: 5.2,
-  },
-  {
-    id: 2,
-    user_id: "user_002",
-    username: "sarah_athlete",
-    heart_rate: 142,
-    pace: 5.8,
-    status: "NORMAL",
-    last_update: new Date(Date.now() - 45000).toISOString(),
-    device_model: "Galaxy Watch 7",
-    latitude: 14.5995,
-    longitude: 120.9842,
-    session_id: "session_002",
-    duration_seconds: 2400,
-    distance_meters: 6500,
-    avg_pace: 5.8,
-  },
-  {
-    id: 3,
-    user_id: "user_003",
-    username: "mike_sprinter",
-    heart_rate: 188,
-    pace: 4.5,
-    status: "CRITICAL",
-    last_update: new Date(Date.now() - 15000).toISOString(),
-    device_model: "Galaxy Watch 7",
-    latitude: 14.5995,
-    longitude: 120.9842,
-    session_id: "session_003",
-    duration_seconds: 1200,
-    distance_meters: 4000,
-    avg_pace: 4.5,
-  },
-  {
-    id: 4,
-    user_id: "user_004",
-    username: "emma_jogger",
-    heart_rate: 128,
-    pace: 6.3,
-    status: "NORMAL",
-    last_update: new Date(Date.now() - 60000).toISOString(),
-    device_model: "Galaxy Watch 7",
-    latitude: 14.5995,
-    longitude: 120.9842,
-    session_id: "session_004",
-    duration_seconds: 3000,
-    distance_meters: 7000,
-    avg_pace: 6.3,
-  },
-];
+// Helper to generate random heart rate based on activity level
+const generateHeartRate = () => {
+  const min = 120;
+  const max = 185;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};
 
-const mockAlerts: Alert[] = [
-  {
-    id: "alert_1",
-    user_id: "user_003",
-    username: "mike_sprinter",
-    session_id: "session_003",
-    heart_rate: 188,
-    severity: "CRITICAL",
-    message: "⚠️ CRITICAL: Heart rate dangerously high (188 BPM)",
-    created_at: new Date(Date.now() - 15000).toISOString(),
-    resolved: false,
-    resolved_at: null,
-  },
-  {
-    id: "alert_2",
-    user_id: "user_001",
-    username: "john_runner",
-    session_id: "session_001",
-    heart_rate: 165,
-    severity: "HIGH",
-    message: "⚠️ WARNING: Heart rate elevated (165 BPM)",
-    created_at: new Date(Date.now() - 30000).toISOString(),
-    resolved: false,
-    resolved_at: null,
-  },
-];
+// Helper to generate random pace (min/km)
+const generatePace = () => {
+  const min = 4.5;
+  const max = 7.0;
+  return parseFloat((Math.random() * (max - min) + min).toFixed(2));
+};
+
+// Helper to determine status from heart rate
+const getStatus = (hr: number): Runner["status"] => {
+  if (hr > 180) return "CRITICAL";
+  if (hr > 165) return "HIGH";
+  if (hr < 100) return "LOW";
+  return "NORMAL";
+};
 
 export default function IoTMonitorPage() {
-  const [runners, setRunners] = useState<Runner[]>(mockRunners);
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
+  const [runners, setRunners] = useState<Runner[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isMonitoring, setIsMonitoring] = useState(true);
-  const [useBackend, setUseBackend] = useState(false); // Toggle between mock and real data
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Load initial data from Supabase
+  // Load real users from database
   useEffect(() => {
-    if (!useBackend) return;
-
-    const loadData = async () => {
+    const loadUsers = async () => {
       try {
-        const [runnersData, alertsData] = await Promise.all([
-          getActiveRunners(),
-          getActiveAlerts(),
-        ]);
+        const { data: users, error } = await supabase
+          .from("users")
+          .select("id, username, email")
+          .limit(20);
 
-        // Transform Supabase data to component format
-        const transformedRunners: Runner[] = runnersData.map((runner, idx) => ({
-          id: idx + 1,
-          ...runner,
-          pace: runner.avg_pace,
-          device_model: "Galaxy Watch 7",
-          latitude: null,
-          longitude: null,
-          timestamp: runner.last_update,
-        }));
+        if (error) throw error;
 
-        const transformedAlerts: Alert[] = alertsData.map((alert) => ({
-          ...alert,
-          message: `⚠️ ${alert.severity}: Heart rate ${
-            alert.severity === "CRITICAL" ? "dangerously high" : "elevated"
-          } (${alert.heart_rate} BPM)`,
-        }));
+        if (users && users.length > 0) {
+          // Generate sample running data for each user
+          const runnersData: Runner[] = users.map((user) => {
+            const heartRate = generateHeartRate();
+            return {
+              id: user.id,
+              username: user.username || user.email.split("@")[0],
+              email: user.email,
+              heart_rate: heartRate,
+              pace: generatePace(),
+              status: getStatus(heartRate),
+              duration_minutes: Math.floor(Math.random() * 60) + 10,
+              distance_km: parseFloat((Math.random() * 8 + 2).toFixed(2)),
+              last_update: new Date(
+                Date.now() - Math.random() * 300000
+              ).toISOString(),
+            };
+          });
 
-        setRunners(transformedRunners);
-        setAlerts(transformedAlerts);
+          setRunners(runnersData);
+        } else {
+          toast({
+            title: "No Users Found",
+            description: "No users in database. Add users first.",
+            variant: "destructive",
+          });
+        }
       } catch (error) {
-        console.error("Error loading IoT data:", error);
+        console.error("Error loading users:", error);
         toast({
           title: "Error",
-          description: "Failed to load real-time data. Using mock data.",
+          description: "Failed to load users from database.",
           variant: "destructive",
         });
+      } finally {
+        setLoading(false);
       }
     };
 
-    loadData();
-  }, [useBackend, toast]);
+    loadUsers();
+  }, [toast]);
 
-  // Subscribe to real-time updates
+  // Simulate real-time heart rate updates
   useEffect(() => {
-    if (!useBackend || !isMonitoring) return;
-
-    // Subscribe to heart rate data changes
-    const hrChannel = subscribeToTable<{
-      session_id: string;
-      heart_rate_bpm: number;
-      recorded_at: string;
-    }>("session_heart_rate_data", (payload) => {
-      if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
-        // Update runner's heart rate
-        setRunners((prev) =>
-          prev.map((runner) => {
-            if (runner.session_id === payload.new.session_id) {
-              const newHR = payload.new.heart_rate_bpm;
-              const newStatus = getStatus(newHR);
-
-              // Create alert if needed
-              if (newStatus === "HIGH" || newStatus === "CRITICAL") {
-                // Note: Alert creation should be handled by backend trigger
-                // This is just for immediate UI feedback
-              }
-
-              return {
-                ...runner,
-                heart_rate: newHR,
-                status: newStatus,
-                last_update: payload.new.recorded_at,
-              };
-            }
-            return runner;
-          })
-        );
-      }
-    });
-
-    // Subscribe to alert changes
-    const alertChannel = subscribeToTable<HeartRateAlert>(
-      "heart_rate_alerts",
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          const newAlert: Alert = {
-            ...payload.new,
-            message: `⚠️ ${payload.new.severity}: Heart rate ${
-              payload.new.severity === "CRITICAL"
-                ? "dangerously high"
-                : "elevated"
-            } (${payload.new.heart_rate} BPM)`,
-          };
-
-          setAlerts((prev) => [newAlert, ...prev]);
-
-          toast({
-            title: "New Alert",
-            description: newAlert.message,
-            variant:
-              payload.new.severity === "CRITICAL" ? "destructive" : "default",
-          });
-        } else if (payload.eventType === "UPDATE" && payload.new.resolved) {
-          // Update alert status
-          setAlerts((prev) =>
-            prev.map((alert) =>
-              alert.id === payload.new.id
-                ? {
-                    ...alert,
-                    resolved: true,
-                    resolved_at: payload.new.resolved_at,
-                  }
-                : alert
-            )
-          );
-        }
-      }
-    );
-
-    // Cleanup subscriptions
-    return () => {
-      unsubscribeChannel(hrChannel);
-      unsubscribeChannel(alertChannel);
-    };
-  }, [useBackend, isMonitoring, toast]);
-
-  // Mock alert creation function
-  const createMockAlert = useCallback(
-    (
-      userId: string,
-      username: string,
-      hr: number,
-      status: "HIGH" | "CRITICAL"
-    ) => {
-      const newAlert: Alert = {
-        id: `alert_${Date.now()}`,
-        user_id: userId,
-        username,
-        session_id: "mock_session",
-        heart_rate: hr,
-        severity: status,
-        message:
-          status === "CRITICAL"
-            ? `⚠️ CRITICAL: Heart rate dangerously high (${hr} BPM)`
-            : `⚠️ WARNING: Heart rate elevated (${hr} BPM)`,
-        created_at: new Date().toISOString(),
-        resolved: false,
-        resolved_at: null,
-      };
-
-      setAlerts((prev) => [newAlert, ...prev]);
-
-      toast({
-        title: "New Alert",
-        description: newAlert.message,
-        variant: status === "CRITICAL" ? "destructive" : "default",
-      });
-    },
-    [toast]
-  );
-
-  // Simulate real-time updates (MOCK MODE ONLY)
-  useEffect(() => {
-    if (!isMonitoring || useBackend) return;
+    if (!isMonitoring || runners.length === 0) return;
 
     const interval = setInterval(() => {
       setRunners((prev) =>
         prev.map((runner) => {
-          // Randomly update heart rate
-          const change = Math.floor(Math.random() * 10) - 5;
-          const newHR = Math.max(60, Math.min(200, runner.heart_rate + change));
+          // Random heart rate change (-5 to +5)
+          const change = Math.floor(Math.random() * 11) - 5;
+          const newHR = Math.max(90, Math.min(195, runner.heart_rate + change));
           const newStatus = getStatus(newHR);
-
-          // Create alert if status changed to HIGH or CRITICAL
-          if (
-            (newStatus === "HIGH" || newStatus === "CRITICAL") &&
-            runner.status !== newStatus
-          ) {
-            createMockAlert(runner.user_id, runner.username, newHR, newStatus);
-          }
 
           return {
             ...runner,
@@ -346,74 +136,45 @@ export default function IoTMonitorPage() {
           };
         })
       );
-    }, 3000);
+    }, 3000); // Update every 3 seconds
 
     return () => clearInterval(interval);
-  }, [isMonitoring, useBackend, createMockAlert]);
-
-  const getStatus = (hr: number): Runner["status"] => {
-    if (hr > 180) return "CRITICAL";
-    if (hr > 160) return "HIGH";
-    if (hr < 50) return "LOW";
-    return "NORMAL";
-  };
+  }, [isMonitoring, runners.length]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "CRITICAL":
-        return "bg-red-500 text-white";
+        return "bg-red-500 hover:bg-red-600 text-white";
       case "HIGH":
-        return "bg-amber-500 text-white";
+        return "bg-amber-500 hover:bg-amber-600 text-white";
       case "LOW":
-        return "bg-blue-500 text-white";
+        return "bg-blue-500 hover:bg-blue-600 text-white";
       default:
-        return "bg-green-500 text-white";
+        return "bg-green-500 hover:bg-green-600 text-white";
     }
   };
 
-  const handleResolveAlert = async (alertId: string) => {
-    const alert = alerts.find((a) => a.id === alertId);
-    if (!alert) return;
-
-    try {
-      if (useBackend) {
-        // Use Supabase to resolve alert
-        await resolveAlert(alertId);
-      }
-
-      // Update local state
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.id === alertId
-            ? { ...a, resolved: true, resolved_at: new Date().toISOString() }
-            : a
-        )
-      );
-
-      toast({
-        title: "Alert Resolved",
-        description: "Alert has been marked as resolved",
-      });
-    } catch (error) {
-      console.error("Error resolving alert:", error);
-      toast({
-        title: "Error",
-        description: "Failed to resolve alert",
-        variant: "destructive",
-      });
+  const getHeartColor = (status: string) => {
+    switch (status) {
+      case "CRITICAL":
+        return "text-red-500";
+      case "HIGH":
+        return "text-amber-500";
+      case "LOW":
+        return "text-blue-500";
+      default:
+        return "text-green-500";
     }
   };
 
   const filteredRunners = runners.filter((runner) => {
     const matchesSearch =
       runner.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      runner.user_id.toLowerCase().includes(searchQuery.toLowerCase());
+      runner.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus =
       statusFilter === "all" || runner.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
-
-  const activeAlerts = alerts.filter((alert) => !alert.resolved);
 
   const formatTimeAgo = (timestamp: string) => {
     const seconds = Math.floor(
@@ -426,376 +187,307 @@ export default function IoTMonitorPage() {
     return `${hours}h ago`;
   };
 
+  const criticalRunners = runners.filter((r) => r.status === "CRITICAL").length;
+  const highRunners = runners.filter((r) => r.status === "HIGH").length;
+  const normalRunners = runners.filter((r) => r.status === "NORMAL").length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Activity className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-gray-500">Loading runners...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 space-y-6">
-      {/* Page Header */}
+    <div className="min-h-screen p-3 sm:p-6 space-y-4 sm:space-y-6">
+      {/* Page Header - Mobile Optimized */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        className="flex flex-col gap-3"
       >
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-            <Heart className="h-8 w-8 text-red-500 animate-pulse" />
-            IoT Heart Rate Monitor
-          </h1>
-          <p className="text-gray-700 dark:text-gray-300">
-            Real-time monitoring of all active runners
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant={useBackend ? "default" : "outline"}
-            onClick={() => setUseBackend(!useBackend)}
-            className="hidden sm:flex"
-          >
-            {useBackend ? "🔗 Live Data" : "🎭 Mock Data"}
-          </Button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Heart className="h-6 w-6 sm:h-8 sm:w-8 text-red-500 animate-pulse" />
+            <div>
+              <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                Live Monitor
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                {runners.length} Active Runners
+              </p>
+            </div>
+          </div>
           <Button
             variant={isMonitoring ? "default" : "outline"}
+            size="sm"
             onClick={() => setIsMonitoring(!isMonitoring)}
+            className="flex items-center gap-1 sm:gap-2"
           >
             {isMonitoring ? (
               <>
-                <Pause className="mr-2 h-4 w-4" />
-                Pause
+                <Pause className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Pause</span>
               </>
             ) : (
               <>
-                <Play className="mr-2 h-4 w-4" />
-                Resume
+                <Play className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Start</span>
               </>
             )}
-          </Button>
-          <Button variant="outline">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export
           </Button>
         </div>
       </motion.div>
 
-      {/* Stats Cards */}
+      {/* Quick Stats - Mobile Friendly */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4"
       >
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/30 border-blue-200 dark:border-blue-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  Active Runners
-                </p>
-                <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
-                  {runners.length}
-                </p>
-              </div>
-              <Activity className="h-10 w-10 text-blue-500" />
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/50 dark:to-green-900/30 border-green-200">
+          <CardContent className="p-3 sm:p-6">
+            <div className="text-center">
+              <p className="text-2xl sm:text-4xl font-bold text-green-700 dark:text-green-300">
+                {normalRunners}
+              </p>
+              <p className="text-xs sm:text-sm text-green-600 dark:text-green-400 mt-1">
+                Normal
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/30 border-red-200 dark:border-red-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-red-700 dark:text-red-300">
-                  Active Alerts
-                </p>
-                <p className="text-3xl font-bold text-red-900 dark:text-red-100">
-                  {activeAlerts.length}
-                </p>
-              </div>
-              <Bell className="h-10 w-10 text-red-500 animate-pulse" />
+        <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950/50 dark:to-amber-900/30 border-amber-200">
+          <CardContent className="p-3 sm:p-6">
+            <div className="text-center">
+              <p className="text-2xl sm:text-4xl font-bold text-amber-700 dark:text-amber-300">
+                {highRunners}
+              </p>
+              <p className="text-xs sm:text-sm text-amber-600 dark:text-amber-400 mt-1">
+                High
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950/50 dark:to-amber-900/30 border-amber-200 dark:border-amber-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Avg Heart Rate
-                </p>
-                <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">
-                  {Math.round(
-                    runners.reduce((sum, r) => sum + r.heart_rate, 0) /
-                      runners.length
-                  )}
-                </p>
-              </div>
-              <Heart className="h-10 w-10 text-amber-500" />
+        <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/30 border-red-200">
+          <CardContent className="p-3 sm:p-6">
+            <div className="text-center">
+              <p className="text-2xl sm:text-4xl font-bold text-red-700 dark:text-red-300">
+                {criticalRunners}
+              </p>
+              <p className="text-xs sm:text-sm text-red-600 dark:text-red-400 mt-1">
+                Critical
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/50 dark:to-green-900/30 border-green-200 dark:border-green-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-700 dark:text-green-300">
-                  Normal Status
-                </p>
-                <p className="text-3xl font-bold text-green-900 dark:text-green-100">
-                  {runners.filter((r) => r.status === "NORMAL").length}
-                </p>
-              </div>
-              <AlertTriangle className="h-10 w-10 text-green-500" />
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/30 border-blue-200">
+          <CardContent className="p-3 sm:p-6">
+            <div className="text-center">
+              <p className="text-2xl sm:text-4xl font-bold text-blue-700 dark:text-blue-300">
+                {Math.round(
+                  runners.reduce((sum, r) => sum + r.heart_rate, 0) /
+                    runners.length || 0
+                )}
+              </p>
+              <p className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 mt-1">
+                Avg BPM
+              </p>
             </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      <Tabs defaultValue="monitor" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="monitor">Live Monitor</TabsTrigger>
-          <TabsTrigger value="alerts">
-            Alerts ({activeAlerts.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* Search and Filter - Mobile Optimized */}
+      <Card>
+        <CardContent className="p-3 sm:p-6 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search runners..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <Button
+              size="sm"
+              variant={statusFilter === "all" ? "default" : "outline"}
+              onClick={() => setStatusFilter("all")}
+              className="whitespace-nowrap"
+            >
+              All ({runners.length})
+            </Button>
+            <Button
+              size="sm"
+              variant={statusFilter === "CRITICAL" ? "destructive" : "outline"}
+              onClick={() => setStatusFilter("CRITICAL")}
+              className="whitespace-nowrap"
+            >
+              Critical ({criticalRunners})
+            </Button>
+            <Button
+              size="sm"
+              variant={statusFilter === "HIGH" ? "default" : "outline"}
+              onClick={() => setStatusFilter("HIGH")}
+              className="whitespace-nowrap bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              High ({highRunners})
+            </Button>
+            <Button
+              size="sm"
+              variant={statusFilter === "NORMAL" ? "default" : "outline"}
+              onClick={() => setStatusFilter("NORMAL")}
+              className="whitespace-nowrap"
+            >
+              Normal ({normalRunners})
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Live Monitor Tab */}
-        <TabsContent value="monitor" className="space-y-6">
-          {/* Search and Filter */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search by username or ID..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant={statusFilter === "all" ? "default" : "outline"}
-                    onClick={() => setStatusFilter("all")}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant={
-                      statusFilter === "CRITICAL" ? "destructive" : "outline"
-                    }
-                    onClick={() => setStatusFilter("CRITICAL")}
-                  >
-                    Critical
-                  </Button>
-                  <Button
-                    variant={statusFilter === "HIGH" ? "default" : "outline"}
-                    onClick={() => setStatusFilter("HIGH")}
-                  >
-                    High
-                  </Button>
-                  <Button
-                    variant={statusFilter === "NORMAL" ? "default" : "outline"}
-                    onClick={() => setStatusFilter("NORMAL")}
-                  >
-                    Normal
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Runners List - Compact Mobile View */}
+      <div className="space-y-2 sm:space-y-3">
+        {filteredRunners.map((runner, index) => (
+          <motion.div
+            key={runner.id}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.03 }}
+          >
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-3">
+                  {/* Status Indicator */}
+                  <div className="flex-shrink-0">
+                    <div
+                      className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${getStatusColor(
+                        runner.status
+                      )} flex items-center justify-center`}
+                    >
+                      <Heart
+                        className={`h-4 w-4 sm:h-5 sm:w-5 ${
+                          runner.status === "CRITICAL" ? "animate-pulse" : ""
+                        }`}
+                      />
+                    </div>
+                  </div>
 
-          {/* Active Runners Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredRunners.map((runner, index) => (
-              <motion.div
-                key={runner.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Card className="hover:shadow-lg transition-all hover:scale-105">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                          {runner.username}
-                        </CardTitle>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {runner.device_model}
-                        </p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                          ID: {runner.user_id}
-                        </p>
-                      </div>
-                      <Badge className={getStatusColor(runner.status)}>
+                  {/* Runner Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h3 className="font-semibold text-sm sm:text-base truncate">
+                        {runner.username}
+                      </h3>
+                      <Badge
+                        className={`${getStatusColor(
+                          runner.status
+                        )} text-xs shrink-0`}
+                      >
                         {runner.status}
                       </Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Heart Rate */}
-                      <div className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <Heart className="h-5 w-5 text-red-500" />
-                          <span className="text-gray-600 dark:text-gray-400">
-                            Heart Rate
-                          </span>
-                        </div>
-                        <span className="text-2xl font-bold text-red-600">
-                          {runner.heart_rate}
+
+                    {/* Metrics Row */}
+                    <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
+                      <div className="flex items-center gap-1">
+                        <Heart
+                          className={`h-3 w-3 sm:h-4 sm:w-4 ${getHeartColor(
+                            runner.status
+                          )}`}
+                        />
+                        <span className="font-bold">{runner.heart_rate}</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          BPM
                         </span>
                       </div>
 
-                      {/* Pace */}
-                      {runner.pace && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600 dark:text-gray-400">
-                            🏃 Pace
-                          </span>
-                          <span className="font-semibold">
-                            {runner.pace.toFixed(2)} min/km
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Location */}
-                      {runner.latitude && runner.longitude && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            Location
-                          </span>
-                          <span className="text-sm">
-                            {runner.latitude.toFixed(4)},{" "}
-                            {runner.longitude.toFixed(4)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Timestamp */}
-                      <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          Last Update
+                      <div className="flex items-center gap-1">
+                        <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
+                        <span className="font-semibold">{runner.pace}</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          min/km
                         </span>
-                        <span className="text-gray-500">
-                          {formatTimeAgo(runner.last_update)}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {runner.duration_minutes}m
                         </span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
 
-          {/* Empty State */}
-          {filteredRunners.length === 0 && (
-            <Card className="p-12 text-center">
-              <Activity className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400 text-lg font-medium">
-                No runners found
-              </p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                {searchQuery
-                  ? "Try adjusting your search filters"
-                  : "Waiting for runners to start their workouts..."}
-              </p>
+                    {/* Distance and Last Update */}
+                    <div className="flex items-center justify-between mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      <span>📍 {runner.distance_km} km</span>
+                      <span>{formatTimeAgo(runner.last_update)}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
             </Card>
-          )}
-        </TabsContent>
+          </motion.div>
+        ))}
+      </div>
 
-        {/* Alerts Tab */}
-        <TabsContent value="alerts" className="space-y-4">
-          {activeAlerts.length > 0 ? (
-            activeAlerts.map((alert, index) => (
-              <motion.div
-                key={alert.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Card
-                  className={`border-2 ${
-                    alert.severity === "CRITICAL"
-                      ? "border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/10"
-                      : "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10"
-                  }`}
+      {/* Empty State */}
+      {filteredRunners.length === 0 && (
+        <Card className="p-8 sm:p-12 text-center">
+          <User className="h-12 w-12 sm:h-16 sm:w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400 text-base sm:text-lg font-medium">
+            No runners found
+          </p>
+          <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">
+            {searchQuery
+              ? "Try adjusting your search"
+              : "No runners match the selected filter"}
+          </p>
+        </Card>
+      )}
+
+      {/* Critical Alert Banner - Mobile Sticky */}
+      {criticalRunners > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-3 left-3 right-3 sm:bottom-6 sm:left-6 sm:right-6 z-50"
+        >
+          <Card className="bg-red-500 text-white border-red-600 shadow-lg">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 animate-pulse shrink-0" />
+                <div className="flex-1">
+                  <p className="font-bold text-sm sm:text-base">
+                    Critical Alert!
+                  </p>
+                  <p className="text-xs sm:text-sm opacity-90">
+                    {criticalRunners} runner
+                    {criticalRunners > 1 ? "s" : ""} with critical heart rate
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setStatusFilter("CRITICAL")}
+                  className="shrink-0"
                 >
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <AlertTriangle
-                            className={`h-6 w-6 ${
-                              alert.severity === "CRITICAL"
-                                ? "text-red-500"
-                                : "text-amber-500"
-                            }`}
-                          />
-                          <div>
-                            <h3 className="font-semibold text-lg">
-                              {alert.username}
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              {alert.user_id}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-gray-900 dark:text-white mb-3">
-                          {alert.message}
-                        </p>
-                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {formatTimeAgo(alert.created_at)}
-                          </span>
-                          <Badge
-                            variant={
-                              alert.severity === "CRITICAL"
-                                ? "destructive"
-                                : "default"
-                            }
-                          >
-                            {alert.severity}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleResolveAlert(alert.id)}
-                        >
-                          Resolve
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          View Details
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))
-          ) : (
-            <Card className="p-12 text-center">
-              <Bell className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400 text-lg font-medium">
-                No active alerts
-              </p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                All runners are within normal heart rate ranges
-              </p>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+                  View
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
     </div>
   );
 }

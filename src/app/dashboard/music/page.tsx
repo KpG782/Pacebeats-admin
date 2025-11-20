@@ -1,16 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   flexRender,
   getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
   useReactTable,
   type ColumnDef,
-  type SortingState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -36,72 +33,151 @@ import {
   Search,
   Grid3x3,
   List,
-  ArrowUpDown,
   Music,
   Download,
   TrendingUp,
   PlayCircle,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
-import {
-  enhancedMusicTracks,
-  enhancedGenres,
-  enhancedMoods,
-} from "@/lib/enhanced-music-data";
-import { MusicTrack } from "@/lib/types/music";
-import { MusicCard } from "@/components/dashboard/music-card";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { useToast } from "@/components/ui/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getMusicTracks,
+  getGenres,
+  getMoods,
+  getMusicStats,
+} from "@/lib/supabase/music-queries";
+import {
+  MusicTrack,
+  formatDuration,
+  getMoodColor,
+  getGenreColor,
+  MOODS,
+  GENRES,
+} from "@/lib/supabase/music-types";
+
+const PAGE_SIZE = 50; // Load 50 tracks per page for optimal performance
 
 export default function MusicPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [view, setView] = useState<"grid" | "table">("grid");
-  const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [genreFilter, setGenreFilter] = useState<string>("all");
   const [moodFilter, setMoodFilter] = useState<string>("all");
-  const [bpmFilter, setBpmFilter] = useState<string>("all");
-  const [energyFilter, setEnergyFilter] = useState<string>("all");
+  const [tempoMin, setTempoMin] = useState<number | undefined>();
+  const [tempoMax, setTempoMax] = useState<number | undefined>();
+  const [energyMin, setEnergyMin] = useState<number | undefined>();
+  const [energyMax, setEnergyMax] = useState<number | undefined>();
 
-  // Memoize filtered music for better performance
-  const filteredMusic = useMemo(() => {
-    return enhancedMusicTracks.filter((track) => {
-      const matchesSearch =
-        track.track_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        track.artist_name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesGenre = genreFilter === "all" || track.genre === genreFilter;
-      const matchesMood = moodFilter === "all" || track.mood === moodFilter;
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTracks, setTotalTracks] = useState(0);
 
-      // BPM filter
-      let matchesBPM = true;
-      if (bpmFilter !== "all") {
-        const [min, max] = bpmFilter.split("-").map(Number);
-        if (max) {
-          matchesBPM = track.bpm >= min && track.bpm <= max;
-        } else {
-          matchesBPM = track.bpm >= min;
-        }
+  // Data state
+  const [tracks, setTracks] = useState<MusicTrack[]>([]);
+  const [genres, setGenres] = useState<string[]>([]);
+  const [moods, setMoods] = useState<string[]>([]);
+  const [stats, setStats] = useState({
+    totalTracks: 0,
+    totalGenres: 0,
+    totalMoods: 0,
+  });
+
+  // Loading states
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(true);
+
+  // Load initial data (filters and stats) - runs once
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const [genresData, moodsData, statsData] = await Promise.all([
+          getGenres(),
+          getMoods(),
+          getMusicStats(),
+        ]);
+        setGenres(genresData);
+        setMoods(moodsData);
+        setStats(statsData);
+      } catch (error: unknown) {
+        const err = error as Error;
+        toast({
+          title: "Error Loading Filters",
+          description: err.message,
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingFilters(false);
       }
+    };
+    loadInitialData();
+  }, [toast]);
 
-      // Energy filter
-      let matchesEnergy = true;
-      if (energyFilter !== "all") {
-        const energyLevel = parseInt(energyFilter);
-        matchesEnergy =
-          track.energy_level >= energyLevel &&
-          track.energy_level < energyLevel + 3;
-      }
+  // Load tracks based on filters and pagination
+  const loadTracks = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const filters = {
+        search: searchQuery || undefined,
+        genre: genreFilter !== "all" ? genreFilter : undefined,
+        mood: moodFilter !== "all" ? moodFilter : undefined,
+        minTempo: tempoMin,
+        maxTempo: tempoMax,
+        minEnergy: energyMin,
+        maxEnergy: energyMax,
+        limit: PAGE_SIZE,
+        offset: (currentPage - 1) * PAGE_SIZE,
+      };
 
-      return (
-        matchesSearch &&
-        matchesGenre &&
-        matchesMood &&
-        matchesBPM &&
-        matchesEnergy
-      );
-    });
-  }, [searchQuery, genreFilter, moodFilter, bpmFilter, energyFilter]);
+      const result = await getMusicTracks(filters);
+      setTracks(result.tracks);
+      setTotalTracks(result.total);
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast({
+        title: "Error Loading Tracks",
+        description: err.message,
+        variant: "destructive",
+      });
+      setTracks([]);
+      setTotalTracks(0);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    searchQuery,
+    genreFilter,
+    moodFilter,
+    tempoMin,
+    tempoMax,
+    energyMin,
+    energyMax,
+    currentPage,
+    toast,
+  ]);
+
+  // Load tracks when filters or page changes
+  useEffect(() => {
+    loadTracks();
+  }, [loadTracks]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchQuery,
+    genreFilter,
+    moodFilter,
+    tempoMin,
+    tempoMax,
+    energyMin,
+    energyMax,
+  ]);
 
   const handleViewDetails = (trackId: string) => {
     router.push(`/dashboard/music/${trackId}`);
@@ -112,29 +188,23 @@ export default function MusicPage() {
       "Track ID",
       "Title",
       "Artist",
-      "Album",
       "Genre",
       "Mood",
-      "BPM",
+      "Tempo (BPM)",
       "Energy",
       "Duration",
-      "Plays",
-      "Listeners",
+      "Year",
     ];
-    const rows = filteredMusic.map((track) => [
-      track.id,
-      track.track_name,
-      track.artist_name,
-      track.album_name || "N/A",
-      track.genre,
-      track.mood,
-      track.bpm,
-      track.energy_level,
-      Math.floor(track.duration_ms / 60000) +
-        ":" +
-        ((track.duration_ms % 60000) / 1000).toFixed(0).padStart(2, "0"),
-      track.total_plays,
-      track.unique_listeners,
+    const rows = tracks.map((track) => [
+      track.track_id,
+      track.name,
+      track.artist,
+      track.genre || "N/A",
+      track.mood || "N/A",
+      track.tempo || "N/A",
+      track.energy || "N/A",
+      formatDuration(track.duration_ms || 0),
+      track.year || "N/A",
     ]);
 
     const csvContent =
@@ -154,158 +224,154 @@ export default function MusicPage() {
 
     toast({
       title: "Export Successful",
-      description: `Exported ${filteredMusic.length} tracks to CSV.`,
+      description: `Exported ${tracks.length} tracks to CSV.`,
     });
   };
 
-  // Calculate stats - memoized for performance
-  const stats = useMemo(() => {
-    const totalPlays = filteredMusic.reduce(
-      (sum, track) => sum + track.total_plays,
-      0
-    );
-    const avgCompletionRate =
-      filteredMusic.length > 0
-        ? filteredMusic.reduce(
-            (sum, track) => sum + (track.avg_completion_rate || 0),
-            0
-          ) / filteredMusic.length
-        : 0;
-    const activeTracks = filteredMusic.filter((t) => t.is_active).length;
+  const handleBpmFilterChange = (value: string) => {
+    if (value === "all") {
+      setTempoMin(undefined);
+      setTempoMax(undefined);
+    } else {
+      const [min, max] = value.split("-").map(Number);
+      setTempoMin(min);
+      setTempoMax(max || 999);
+    }
+  };
 
-    return { totalPlays, avgCompletionRate, activeTracks };
-  }, [filteredMusic]);
+  const handleEnergyFilterChange = (value: string) => {
+    if (value === "all") {
+      setEnergyMin(undefined);
+      setEnergyMax(undefined);
+    } else {
+      const level = parseFloat(value);
+      setEnergyMin(level);
+      setEnergyMax(level + 0.3);
+    }
+  };
 
-  const columns: ColumnDef<MusicTrack>[] = useMemo(
-    () => [
-      {
-        accessorKey: "track_name",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
-              className="hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              Title
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-          );
-        },
-        cell: ({ row }) => (
-          <div
-            className="cursor-pointer"
-            onClick={() => handleViewDetails(row.original.id)}
-          >
-            <div className="font-medium text-gray-900 dark:text-white">
-              {row.original.track_name}
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              {row.original.artist_name}
-            </div>
+  // Calculate pagination
+  const totalPages = Math.ceil(totalTracks / PAGE_SIZE);
+  const startIndex = (currentPage - 1) * PAGE_SIZE + 1;
+  const endIndex = Math.min(currentPage * PAGE_SIZE, totalTracks);
+
+  const columns: ColumnDef<MusicTrack>[] = [
+    {
+      accessorKey: "name",
+      header: "Title",
+      cell: ({ row }) => (
+        <div
+          className="cursor-pointer hover:underline"
+          onClick={() => handleViewDetails(row.original.track_id)}
+        >
+          <div className="font-medium text-gray-900 dark:text-white">
+            {row.original.name}
           </div>
-        ),
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            {row.original.artist}
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "genre",
+      header: "Genre",
+      cell: ({ row }) => {
+        const genre = row.original.genre;
+        return genre ? (
+          <Badge
+            variant="secondary"
+            style={{
+              backgroundColor: `${getGenreColor(genre)}20`,
+              color: getGenreColor(genre),
+              borderColor: getGenreColor(genre),
+            }}
+          >
+            {genre}
+          </Badge>
+        ) : (
+          <span className="text-gray-400">-</span>
+        );
       },
-      {
-        accessorKey: "genre",
-        header: "Genre",
-        cell: ({ row }) => {
-          const genre = enhancedGenres.find(
-            (g) => g.name === row.original.genre
-          );
-          return (
-            <Badge
-              variant="secondary"
-              style={{ borderColor: genre?.color, color: genre?.color }}
-            >
-              {row.original.genre}
-            </Badge>
-          );
-        },
+    },
+    {
+      accessorKey: "mood",
+      header: "Mood",
+      cell: ({ row }) => {
+        const mood = row.original.mood;
+        return mood ? (
+          <Badge
+            variant="outline"
+            style={{
+              backgroundColor: `${getMoodColor(mood)}15`,
+              color: getMoodColor(mood),
+              borderColor: getMoodColor(mood),
+            }}
+          >
+            {mood}
+          </Badge>
+        ) : (
+          <span className="text-gray-400">-</span>
+        );
       },
-      {
-        accessorKey: "mood",
-        header: "Mood",
-        cell: ({ row }) => {
-          const mood = enhancedMoods.find((m) => m.name === row.original.mood);
-          return (
-            <Badge variant="outline" style={{ color: mood?.color }}>
-              {row.original.mood}
-            </Badge>
-          );
-        },
+    },
+    {
+      accessorKey: "tempo",
+      header: "BPM",
+      cell: ({ row }) => {
+        const tempo = row.original.tempo;
+        return tempo ? (
+          <span>{Math.round(tempo)}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        );
       },
-      {
-        accessorKey: "bpm",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
-              className="hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              BPM
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-          );
-        },
-        cell: ({ row }) => <span>{row.original.bpm}</span>,
+    },
+    {
+      accessorKey: "energy",
+      header: "Energy",
+      cell: ({ row }) => {
+        const energy = row.original.energy;
+        if (!energy) return <span className="text-gray-400">-</span>;
+        const percentage = Math.round(energy * 100);
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <span className="text-sm">{percentage}%</span>
+          </div>
+        );
       },
-      {
-        accessorKey: "duration_ms",
-        header: "Duration",
-        cell: ({ row }) => {
-          const ms = row.original.duration_ms;
-          const minutes = Math.floor(ms / 60000);
-          const seconds = ((ms % 60000) / 1000).toFixed(0).padStart(2, "0");
-          return (
-            <span>
-              {minutes}:{seconds}
-            </span>
-          );
-        },
+    },
+    {
+      accessorKey: "duration_ms",
+      header: "Duration",
+      cell: ({ row }) => (
+        <span>{formatDuration(row.original.duration_ms || 0)}</span>
+      ),
+    },
+    {
+      accessorKey: "year",
+      header: "Year",
+      cell: ({ row }) => {
+        const year = row.original.year;
+        return year ? (
+          <span>{year}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        );
       },
-      {
-        accessorKey: "total_plays",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
-              className="hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              Plays
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-          );
-        },
-        cell: ({ row }) => (
-          <span className="font-semibold text-primary">
-            {row.original.total_plays.toLocaleString()}
-          </span>
-        ),
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+    },
+  ];
 
   const table = useReactTable({
-    data: filteredMusic,
+    data: tracks,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onSortingChange: setSorting,
-    state: {
-      sorting,
-    },
   });
 
   return (
@@ -321,18 +387,34 @@ export default function MusicPage() {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Music Library
           </h1>
-          <p className="text-gray-700 dark:text-gray-300">
-            Manage your music collection ({filteredMusic.length} tracks)
-          </p>
+          {isLoadingFilters ? (
+            <Skeleton className="h-5 w-48" />
+          ) : (
+            <p className="text-gray-700 dark:text-gray-300">
+              Manage your music collection ({stats.totalTracks.toLocaleString()} tracks total)
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportCSV}>
+          <Button
+            variant="outline"
+            onClick={handleExportCSV}
+            disabled={isLoading}
+          >
             <Download className="mr-2 h-4 w-4" />
             Export CSV
           </Button>
-          <Button variant="default">
+          <Button
+            variant="default"
+            onClick={() =>
+              window.open(
+                "https://www.kaggle.com/datasets/music-dataset",
+                "_blank"
+              )
+            }
+          >
             <Upload className="mr-2 h-4 w-4" />
-            Upload Music
+            Get Music Data (Kaggle)
           </Button>
         </div>
       </motion.div>
@@ -344,34 +426,41 @@ export default function MusicPage() {
         transition={{ duration: 0.4, delay: 0.05 }}
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
       >
-        <StatsCard
-          title="Total Tracks"
-          value={filteredMusic.length.toString()}
-          icon={Music}
-          trend="up"
-          trendValue="+12%"
-        />
-        <StatsCard
-          title="Total Plays"
-          value={stats.totalPlays.toLocaleString()}
-          icon={PlayCircle}
-          trend="up"
-          trendValue="+8.5%"
-        />
-        <StatsCard
-          title="Active Tracks"
-          value={stats.activeTracks.toString()}
-          icon={TrendingUp}
-          trend="up"
-          trendValue="+5%"
-        />
-        <StatsCard
-          title="Avg Completion"
-          value={`${stats.avgCompletionRate.toFixed(1)}%`}
-          icon={BarChart3}
-          trend="up"
-          trendValue="+3.2%"
-        />
+        {isLoadingFilters ? (
+          <>
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </>
+        ) : (
+          <>
+            <StatsCard
+              title="Total Tracks"
+              value={stats.totalTracks.toLocaleString()}
+              icon={Music}
+              trend="neutral"
+            />
+            <StatsCard
+              title="Genres"
+              value={stats.totalGenres.toString()}
+              icon={PlayCircle}
+              trend="neutral"
+            />
+            <StatsCard
+              title="Moods"
+              value={stats.totalMoods.toString()}
+              icon={TrendingUp}
+              trend="neutral"
+            />
+            <StatsCard
+              title="Showing"
+              value={`${startIndex}-${endIndex}`}
+              icon={BarChart3}
+              trend="neutral"
+            />
+          </>
+        )}
       </motion.div>
 
       {/* Filters & View Toggle */}
@@ -381,7 +470,48 @@ export default function MusicPage() {
         transition={{ duration: 0.4, delay: 0.1 }}
       >
         <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-4">
+            {/* Mood Filter Chips */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Filter by Mood
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={moodFilter === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setMoodFilter("all")}
+                  disabled={isLoadingFilters}
+                >
+                  All Moods
+                </Button>
+                {MOODS.map((mood) => (
+                  <Button
+                    key={mood.name}
+                    variant={moodFilter === mood.name ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setMoodFilter(mood.name)}
+                    disabled={isLoadingFilters}
+                    style={
+                      moodFilter === mood.name
+                        ? {
+                            backgroundColor: mood.color,
+                            borderColor: mood.color,
+                            color: "#ffffff",
+                          }
+                        : {
+                            borderColor: mood.color,
+                            color: mood.color,
+                          }
+                    }
+                  >
+                    {mood.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Other Filters Row */}
             <div className="flex flex-col lg:flex-row gap-4">
               {/* Search */}
               <div className="flex-1 relative">
@@ -391,41 +521,53 @@ export default function MusicPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  disabled={isLoadingFilters}
                 />
               </div>
 
               {/* Genre Filter */}
-              <Select value={genreFilter} onValueChange={setGenreFilter}>
+              <Select
+                value={genreFilter}
+                onValueChange={setGenreFilter}
+                disabled={isLoadingFilters}
+              >
                 <SelectTrigger className="w-full lg:w-48">
                   <SelectValue placeholder="All Genres" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Genres</SelectItem>
-                  {enhancedGenres.map((genre) => (
-                    <SelectItem key={genre.id} value={genre.name}>
+                  {GENRES.map((genre) => (
+                    <SelectItem key={genre.name} value={genre.name}>
                       {genre.name}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-
-              {/* Mood Filter */}
-              <Select value={moodFilter} onValueChange={setMoodFilter}>
-                <SelectTrigger className="w-full lg:w-48">
-                  <SelectValue placeholder="All Moods" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Moods</SelectItem>
-                  {enhancedMoods.map((mood) => (
-                    <SelectItem key={mood.id} value={mood.name}>
-                      {mood.name}
-                    </SelectItem>
-                  ))}
+                  {genres
+                    .filter(
+                      (g) =>
+                        g &&
+                        g.trim() &&
+                        !GENRES.some((genre) => genre.name === g)
+                    )
+                    .map((genre) => (
+                      <SelectItem key={genre} value={genre}>
+                        {genre}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
 
               {/* BPM Filter */}
-              <Select value={bpmFilter} onValueChange={setBpmFilter}>
+              <Select
+                value={
+                  tempoMin
+                    ? tempoMax === 999
+                      ? `${tempoMin}-999`
+                      : `${tempoMin}-${tempoMax}`
+                    : "all"
+                }
+                onValueChange={handleBpmFilterChange}
+                disabled={isLoadingFilters}
+              >
                 <SelectTrigger className="w-full lg:w-48">
                   <SelectValue placeholder="All BPM" />
                 </SelectTrigger>
@@ -444,16 +586,20 @@ export default function MusicPage() {
               </Select>
 
               {/* Energy Filter */}
-              <Select value={energyFilter} onValueChange={setEnergyFilter}>
+              <Select
+                value={energyMin?.toString() || "all"}
+                onValueChange={handleEnergyFilterChange}
+                disabled={isLoadingFilters}
+              >
                 <SelectTrigger className="w-full lg:w-48">
                   <SelectValue placeholder="All Energy" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Energy</SelectItem>
-                  <SelectItem value="1">Low (1-3)</SelectItem>
-                  <SelectItem value="4">Medium (4-6)</SelectItem>
-                  <SelectItem value="7">High (7-9)</SelectItem>
-                  <SelectItem value="10">Very High (10)</SelectItem>
+                  <SelectItem value="0">Low (0-30%)</SelectItem>
+                  <SelectItem value="0.3">Medium (30-60%)</SelectItem>
+                  <SelectItem value="0.6">High (60-90%)</SelectItem>
+                  <SelectItem value="0.9">Very High (90%+)</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -463,6 +609,7 @@ export default function MusicPage() {
                   variant={view === "grid" ? "default" : "outline"}
                   size="icon"
                   onClick={() => setView("grid")}
+                  disabled={isLoading}
                 >
                   <Grid3x3 className="h-4 w-4" />
                 </Button>
@@ -470,6 +617,7 @@ export default function MusicPage() {
                   variant={view === "table" ? "default" : "outline"}
                   size="icon"
                   onClick={() => setView("table")}
+                  disabled={isLoading}
                 >
                   <List className="h-4 w-4" />
                 </Button>
@@ -479,22 +627,200 @@ export default function MusicPage() {
         </Card>
       </motion.div>
 
+      {/* Active Filters Display */}
+      {(searchQuery || genreFilter !== "all" || moodFilter !== "all" || tempoMin || energyMin) && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.15 }}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Active Filters:
+          </span>
+          {searchQuery && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-gray-300"
+              onClick={() => setSearchQuery("")}
+            >
+              Search: {searchQuery} ×
+            </Badge>
+          )}
+          {genreFilter !== "all" && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-gray-300"
+              onClick={() => setGenreFilter("all")}
+              style={{
+                backgroundColor: `${getGenreColor(genreFilter)}20`,
+                color: getGenreColor(genreFilter),
+                borderColor: getGenreColor(genreFilter),
+              }}
+            >
+              Genre: {genreFilter} ×
+            </Badge>
+          )}
+          {moodFilter !== "all" && (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-gray-300"
+              onClick={() => setMoodFilter("all")}
+              style={{
+                backgroundColor: `${getMoodColor(moodFilter)}15`,
+                color: getMoodColor(moodFilter),
+                borderColor: getMoodColor(moodFilter),
+              }}
+            >
+              Mood: {moodFilter} ×
+            </Badge>
+          )}
+          {tempoMin && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-gray-300"
+              onClick={() => {
+                setTempoMin(undefined);
+                setTempoMax(undefined);
+              }}
+            >
+              BPM: {tempoMin}-{tempoMax === 999 ? "+" : tempoMax} ×
+            </Badge>
+          )}
+          {energyMin !== undefined && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-gray-300"
+              onClick={() => {
+                setEnergyMin(undefined);
+                setEnergyMax(undefined);
+              }}
+            >
+              Energy: {Math.round(energyMin * 100)}%+ ×
+            </Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearchQuery("");
+              setGenreFilter("all");
+              setMoodFilter("all");
+              setTempoMin(undefined);
+              setTempoMax(undefined);
+              setEnergyMin(undefined);
+              setEnergyMax(undefined);
+            }}
+            className="text-sm"
+          >
+            Clear All
+          </Button>
+        </motion.div>
+      )}
+
       {/* Content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}
       >
-        {view === "grid" ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-3 text-gray-600 dark:text-gray-400">
+              Loading tracks...
+            </span>
+          </div>
+        ) : tracks.length === 0 ? (
+          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+            <CardContent className="p-12 text-center">
+              <Music className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                No tracks found
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Try adjusting your filters or search query.
+              </p>
+            </CardContent>
+          </Card>
+        ) : view === "grid" ? (
           /* Grid View */
-          <motion.div
-            layout
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-          >
-            {filteredMusic.map((track, idx) => (
-              <MusicCard key={track.id} track={track} index={idx} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {tracks.map((track, idx) => (
+              <motion.div
+                key={track.track_id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: idx * 0.02 }}
+              >
+                <Card
+                  className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => handleViewDetails(track.track_id)}
+                >
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                          {track.name}
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                          {track.artist}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {track.genre && (
+                          <Badge
+                            variant="secondary"
+                            className="text-xs"
+                            style={{
+                              backgroundColor: `${getGenreColor(track.genre)}20`,
+                              color: getGenreColor(track.genre),
+                              borderColor: getGenreColor(track.genre),
+                            }}
+                          >
+                            {track.genre}
+                          </Badge>
+                        )}
+                        {track.mood && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs"
+                            style={{
+                              backgroundColor: `${getMoodColor(track.mood)}15`,
+                              color: getMoodColor(track.mood),
+                              borderColor: getMoodColor(track.mood),
+                            }}
+                          >
+                            {track.mood}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                        <span>
+                          {track.tempo ? `${Math.round(track.tempo)} BPM` : "-"}
+                        </span>
+                        <span>{formatDuration(track.duration_ms || 0)}</span>
+                      </div>
+                      {track.energy !== undefined && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                            <span>Energy</span>
+                            <span>{Math.round(track.energy * 100)}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary"
+                              style={{ width: `${track.energy * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             ))}
-          </motion.div>
+          </div>
         ) : (
           /* Table View */
           <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
@@ -524,32 +850,21 @@ export default function MusicPage() {
                     ))}
                   </TableHeader>
                   <TableBody>
-                    {table.getRowModel().rows?.length ? (
-                      table.getRowModel().rows.map((row) => (
-                        <TableRow
-                          key={row.id}
-                          className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext()
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={columns.length}
-                          className="h-24 text-center text-gray-600 dark:text-gray-400"
-                        >
-                          No tracks found.
-                        </TableCell>
+                    {table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        ))}
                       </TableRow>
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -557,6 +872,66 @@ export default function MusicPage() {
           </Card>
         )}
       </motion.div>
+
+      {/* Pagination */}
+      {!isLoading && totalTracks > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className="flex items-center justify-between"
+        >
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Showing {startIndex} to {endIndex} of {totalTracks.toLocaleString()}{" "}
+            tracks
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                return (
+                  <Button
+                    key={i}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className="min-w-[40px]"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }
