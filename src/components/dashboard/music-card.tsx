@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,10 +31,11 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
       <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:shadow-lg transition-all overflow-hidden">
         {/* Album Cover */}
         <div className="relative h-48 overflow-hidden">
-          <img
-            src={track.cover_image_url}
+          <Image
+            src={track.cover_image_url || "/placeholder-album.png"}
             alt={track.track_name}
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
           />
 
           {/* Hover Actions */}

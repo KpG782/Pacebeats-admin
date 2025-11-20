@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -65,7 +66,7 @@ interface DatabaseUser {
 interface RunningSession {
   id: string;
   user_id: string;
-  start_time: string;
+  start_time: string | null;
   end_time: string | null;
   distance_meters: number | null;
   duration_seconds: number | null;
@@ -274,9 +275,12 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               <div className="flex-shrink-0">
                 <Avatar className="h-32 w-32 border-4 border-white dark:border-gray-800 shadow-lg">
                   {user.profile_picture_url ? (
-                    <img
+                    <Image
                       src={user.profile_picture_url}
                       alt={user.username || user.email}
+                      width={128}
+                      height={128}
+                      className="object-cover"
                     />
                   ) : (
                     <div className="h-full w-full bg-primary flex items-center justify-center text-white text-4xl font-bold">
@@ -472,10 +476,12 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                       {sessions.map((session) => (
                         <TableRow key={session.id}>
                           <TableCell>
-                            {format(
-                              new Date(session.start_time),
-                              "MMM dd, yyyy"
-                            )}
+                            {session.start_time
+                              ? format(
+                                  new Date(session.start_time),
+                                  "MMM dd, yyyy"
+                                )
+                              : "No date"}
                           </TableCell>
                           <TableCell>
                             {formatDuration(session.duration_seconds)}

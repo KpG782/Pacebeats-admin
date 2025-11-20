@@ -3,7 +3,32 @@
  * Functions to fetch and manage running sessions from Supabase
  */
 
-import { supabase } from "./client";
+import { supabaseAdmin } from "./admin-client";
+
+// Use admin client to bypass RLS and access all sessions
+const supabase = supabaseAdmin;
+
+// Database row type for running_sessions table
+interface RunningSessionRow {
+  id: string;
+  user_id: string;
+  session_start_time: string;
+  session_end_time?: string | null;
+  session_duration_seconds: number;
+  total_distance_km: number;
+  total_steps?: number;
+  avg_pace_min_per_km?: number | null;
+  avg_cadence_spm?: number | null;
+  avg_heart_rate_bpm?: number | null;
+  max_heart_rate_bpm?: number | null;
+  min_heart_rate_bpm?: number | null;
+  avg_speed_kmh?: number | null;
+  run_type?: string;
+  selected_emotion?: string | null;
+  selected_playlist?: string | null;
+  status: string;
+  created_at: string;
+}
 
 // Types matching the running_sessions table structure
 export interface SessionData {
@@ -12,7 +37,7 @@ export interface SessionData {
   user_id: string;
   user_email: string;
   user_name: string;
-  started_at: string; // Alias for start_time
+  started_at: string | null; // Alias for start_time - nullable for incomplete sessions
   ended_at: string | null; // Alias for end_time
   duration_seconds: number | null;
   duration_minutes: number; // Calculated from duration_seconds
@@ -143,8 +168,11 @@ export async function getAllSessions(): Promise<SessionData[]> {
 
     console.log(`✅ Found ${sessions.length} sessions`);
 
+    // Type assertion for database rows
+    const typedSessions = sessions as RunningSessionRow[];
+
     // Fetch users separately (Android pattern)
-    const userIds = [...new Set(sessions.map((s) => s.user_id))];
+    const userIds = [...new Set(typedSessions.map((s) => s.user_id))];
     const { data: users, error: usersError } = await supabase
       .from("users")
       .select("id, email, username")
@@ -154,11 +182,19 @@ export async function getAllSessions(): Promise<SessionData[]> {
       console.error("⚠️ Error fetching users:", usersError);
     }
 
+    // Type assertion for user records
+    interface UserRecord {
+      id: string;
+      email: string;
+      username: string | null;
+    }
+    const typedUsers = (users || []) as UserRecord[];
+
     // Create user map for quick lookup
-    const userMap = new Map((users || []).map((u) => [u.id, u]));
+    const userMap = new Map(typedUsers.map((u) => [u.id, u]));
 
     // Fetch music history for all sessions to calculate music stats
-    const sessionIds = sessions.map((s) => s.id);
+    const sessionIds = typedSessions.map((s) => s.id);
 
     let musicData: Array<{
       session_id: string;
@@ -217,7 +253,7 @@ export async function getAllSessions(): Promise<SessionData[]> {
     });
 
     // Map to SessionData format
-    const sessionsData: SessionData[] = sessions.map((session) => {
+    const sessionsData: SessionData[] = typedSessions.map((session) => {
       const user = userMap.get(session.user_id);
       const musicStats = musicBySession.get(session.id) || {
         total: 0,
@@ -234,20 +270,20 @@ export async function getAllSessions(): Promise<SessionData[]> {
         user_id: session.user_id,
         user_email: user?.email || "Unknown",
         user_name: user?.username || "Unknown User",
-        started_at: session.session_start_time,
-        ended_at: session.session_end_time,
-        duration_seconds: session.session_duration_seconds,
+        started_at: session.session_start_time || null,
+        ended_at: (session.session_end_time || null) as string | null,
+        duration_seconds: session.session_duration_seconds ?? null,
         duration_minutes: Math.round(
           (session.session_duration_seconds || 0) / 60
         ),
-        distance_km: session.total_distance_km || 0,
+        distance_km: session.total_distance_km ?? null,
         total_steps: session.total_steps || 0,
-        avg_pace_min_per_km: session.avg_pace_min_per_km,
-        avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm: session.avg_heart_rate_bpm || 0,
-        max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
-        min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
-        avg_speed_kmh: session.avg_speed_kmh || 0,
+        avg_pace_min_per_km: session.avg_pace_min_per_km ?? null,
+        avg_cadence_spm: session.avg_cadence_spm ?? null,
+        avg_heart_rate_bpm: session.avg_heart_rate_bpm ?? null,
+        max_heart_rate_bpm: session.max_heart_rate_bpm ?? null,
+        min_heart_rate_bpm: session.min_heart_rate_bpm ?? null,
+        avg_speed_kmh: session.avg_speed_kmh ?? null,
         total_songs: musicStats.total,
         completed_songs: musicStats.completed,
         skipped_songs: musicStats.skipped,
@@ -255,9 +291,11 @@ export async function getAllSessions(): Promise<SessionData[]> {
         disliked_songs: musicStats.disliked,
         total_time_ms: musicStats.totalTime,
         run_type: session.run_type || "quick",
-        selected_emotion: session.selected_emotion,
-        selected_playlist: session.selected_playlist,
-        status: session.status || "completed",
+        selected_emotion: session.selected_emotion ?? null,
+        selected_playlist: session.selected_playlist ?? null,
+        status:
+          (session.status as "active" | "completed" | "paused" | "cancelled") ||
+          "completed",
         created_at: session.created_at,
       };
     });
@@ -306,18 +344,29 @@ export async function getSessionDetail(
       return null;
     }
 
+    // Type assertion for database row
+    const typedSession = session as RunningSessionRow;
+
     console.log("✅ Session found, fetching related data...");
 
     // Fetch user separately (Android pattern)
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("id, email, username")
-      .eq("id", session.user_id)
+      .eq("id", typedSession.user_id)
       .single();
 
     if (userError) {
       console.warn("⚠️ Error fetching user:", userError.message);
     }
+
+    // Type assertion for user record
+    interface UserRecord {
+      id: string;
+      email: string;
+      username: string | null;
+    }
+    const typedUser = user as UserRecord | null;
 
     // Fetch all related data in parallel
     const [
@@ -369,51 +418,53 @@ export async function getSessionDetail(
       console.warn("⚠️ Error fetching pace intervals:", paceError.message);
     }
 
+    // Type assertions for fetched data
+    const typedMusicHistory = (musicHistory || []) as MusicTrack[];
+
     // Calculate music stats
     const musicStats = {
-      total: musicHistory?.length || 0,
-      completed: musicHistory?.filter((t) => !t.was_skipped).length || 0,
-      skipped: musicHistory?.filter((t) => t.was_skipped).length || 0,
-      liked: musicHistory?.filter((t) => t.was_liked).length || 0,
+      total: typedMusicHistory.length,
+      completed: typedMusicHistory.filter((t) => !t.was_skipped).length,
+      skipped: typedMusicHistory.filter((t) => t.was_skipped).length,
+      liked: typedMusicHistory.filter((t) => t.was_liked).length,
       disliked: 0, // Not in current schema
-      totalTime:
-        musicHistory?.reduce(
-          (sum, t) => sum + (t.played_duration_seconds || 0) * 1000,
-          0
-        ) || 0,
+      totalTime: typedMusicHistory.reduce(
+        (sum, t) => sum + (t.played_duration_seconds || 0) * 1000,
+        0
+      ),
     };
 
     const sessionDetail: SessionDetail = {
-      id: session.id,
-      session_id: session.id,
-      user_id: session.user_id,
-      user_email: user?.email || "Unknown",
-      user_name: user?.username || "Unknown User",
-      started_at: session.session_start_time,
-      ended_at: session.session_end_time,
-      duration_seconds: session.session_duration_seconds,
+      id: typedSession.id,
+      session_id: typedSession.id,
+      user_id: typedSession.user_id,
+      user_email: typedUser?.email || "Unknown",
+      user_name: typedUser?.username || "Unknown User",
+      started_at: typedSession.session_start_time ?? null,
+      ended_at: typedSession.session_end_time ?? null,
+      duration_seconds: typedSession.session_duration_seconds ?? null,
       duration_minutes: Math.round(
-        (session.session_duration_seconds || 0) / 60
+        (typedSession.session_duration_seconds || 0) / 60
       ),
-      distance_km: session.total_distance_km || 0,
-      total_steps: session.total_steps || 0,
-      avg_pace_min_per_km: session.avg_pace_min_per_km,
-      avg_cadence_spm: session.avg_cadence_spm || 0,
-      avg_heart_rate_bpm: session.avg_heart_rate_bpm || 0,
-      max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
-      min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
-      avg_speed_kmh: session.avg_speed_kmh || 0,
+      distance_km: typedSession.total_distance_km ?? null,
+      total_steps: typedSession.total_steps || 0,
+      avg_pace_min_per_km: typedSession.avg_pace_min_per_km ?? null,
+      avg_cadence_spm: typedSession.avg_cadence_spm ?? null,
+      avg_heart_rate_bpm: typedSession.avg_heart_rate_bpm ?? null,
+      max_heart_rate_bpm: typedSession.max_heart_rate_bpm ?? null,
+      min_heart_rate_bpm: typedSession.min_heart_rate_bpm ?? null,
+      avg_speed_kmh: typedSession.avg_speed_kmh ?? null,
       total_songs: musicStats.total,
       completed_songs: musicStats.completed,
       skipped_songs: musicStats.skipped,
       liked_songs: musicStats.liked,
       disliked_songs: musicStats.disliked,
       total_time_ms: musicStats.totalTime,
-      run_type: session.run_type || "quick",
-      selected_emotion: session.selected_emotion,
-      selected_playlist: session.selected_playlist,
+      run_type: typedSession.run_type || "quick",
+      selected_emotion: typedSession.selected_emotion ?? null,
+      selected_playlist: typedSession.selected_playlist ?? null,
       status: "completed",
-      created_at: session.created_at,
+      created_at: typedSession.created_at,
       heart_rate_data: (heartRateData || []) as HeartRateData[],
       music_history: (musicHistory || []) as MusicTrack[],
       gps_points: (gpsPoints || []) as GpsPoint[],
@@ -468,6 +519,9 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
       return [];
     }
 
+    // Type assertion for database rows
+    const typedSessions = sessions as RunningSessionRow[];
+
     // Fetch user info separately (Android pattern)
     const { data: user, error: userError } = await supabase
       .from("users")
@@ -479,8 +533,16 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
       console.error("⚠️ Error fetching user:", userError);
     }
 
+    // Type assertion for user record
+    interface UserRecord {
+      id: string;
+      email: string;
+      username: string | null;
+    }
+    const typedUser = user as UserRecord | null;
+
     // Get music stats for these sessions
-    const sessionIds = sessions.map((s) => s.id);
+    const sessionIds = typedSessions.map((s) => s.id);
     let musicData: Array<{
       session_id: string;
       was_skipped: boolean;
@@ -532,7 +594,7 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
       stats.totalTime += (track.played_duration_seconds || 0) * 1000;
     });
 
-    const sessionsData = sessions.map((session) => {
+    const sessionsData = typedSessions.map((session) => {
       const musicStats = musicBySession.get(session.id) || {
         total: 0,
         completed: 0,
@@ -545,22 +607,22 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
         id: session.id,
         session_id: session.id,
         user_id: session.user_id,
-        user_email: user?.email || "Unknown",
-        user_name: user?.username || "Unknown User",
-        started_at: session.session_start_time,
-        ended_at: session.session_end_time,
-        duration_seconds: session.session_duration_seconds,
+        user_email: typedUser?.email || "Unknown",
+        user_name: typedUser?.username || "Unknown User",
+        started_at: session.session_start_time ?? null,
+        ended_at: session.session_end_time ?? null,
+        duration_seconds: session.session_duration_seconds ?? null,
         duration_minutes: Math.round(
           (session.session_duration_seconds || 0) / 60
         ),
-        distance_km: session.total_distance_km || 0,
+        distance_km: session.total_distance_km ?? null,
         total_steps: session.total_steps || 0,
-        avg_pace_min_per_km: session.avg_pace_min_per_km,
-        avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm: session.avg_heart_rate_bpm || 0,
-        max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
-        min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
-        avg_speed_kmh: session.avg_speed_kmh || 0,
+        avg_pace_min_per_km: session.avg_pace_min_per_km ?? null,
+        avg_cadence_spm: session.avg_cadence_spm ?? null,
+        avg_heart_rate_bpm: session.avg_heart_rate_bpm ?? null,
+        max_heart_rate_bpm: session.max_heart_rate_bpm ?? null,
+        min_heart_rate_bpm: session.min_heart_rate_bpm ?? null,
+        avg_speed_kmh: session.avg_speed_kmh ?? null,
         total_songs: musicStats.total,
         completed_songs: musicStats.completed,
         skipped_songs: musicStats.skipped,
@@ -568,9 +630,11 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
         disliked_songs: 0,
         total_time_ms: musicStats.totalTime,
         run_type: session.run_type || "quick",
-        selected_emotion: session.selected_emotion,
-        selected_playlist: session.selected_playlist,
-        status: session.status || "completed",
+        selected_emotion: session.selected_emotion ?? null,
+        selected_playlist: session.selected_playlist ?? null,
+        status:
+          (session.status as "active" | "completed" | "paused" | "cancelled") ||
+          "completed",
         created_at: session.created_at,
       };
     });
@@ -585,6 +649,14 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
     });
     return [];
   }
+}
+
+// Type for user data from database
+interface UserRow {
+  id: string;
+  email: string | null;
+  username: string | null;
+  created_at: string;
 }
 
 /**
@@ -610,6 +682,9 @@ export async function getUsersWithSessions(): Promise<UserWithSessions[]> {
       return [];
     }
 
+    // Type assertion for user records
+    const typedUsers = users as UserRow[];
+
     // Fetch all sessions (get all columns to avoid field name issues)
     const { data: sessions, error: sessionsError } = await supabase
       .from("running_sessions")
@@ -619,8 +694,11 @@ export async function getUsersWithSessions(): Promise<UserWithSessions[]> {
       console.error("⚠️ Error fetching sessions:", sessionsError);
     }
 
+    // Type assertion for session records
+    const typedSessions = (sessions || []) as RunningSessionRow[];
+
     // Fetch all session IDs first to get music count
-    const allSessionIds = (sessions || []).map((s) => s.id);
+    const allSessionIds = typedSessions.map((s) => s.id);
 
     // Fetch music history count with proper session_id mapping
     let musicData: Array<{ session_id: string }> = [];
@@ -638,8 +716,8 @@ export async function getUsersWithSessions(): Promise<UserWithSessions[]> {
     }
 
     // Group sessions by user
-    const sessionsByUser = new Map<string, typeof sessions>();
-    (sessions || []).forEach((session) => {
+    const sessionsByUser = new Map<string, RunningSessionRow[]>();
+    typedSessions.forEach((session) => {
       if (!sessionsByUser.has(session.user_id)) {
         sessionsByUser.set(session.user_id, []);
       }
@@ -648,7 +726,7 @@ export async function getUsersWithSessions(): Promise<UserWithSessions[]> {
 
     // Count music tracks per user
     const musicCountByUser = new Map<string, number>();
-    (sessions || []).forEach((session) => {
+    typedSessions.forEach((session) => {
       if (!musicCountByUser.has(session.user_id)) {
         const userSessions = sessionsByUser.get(session.user_id) || [];
         const userSessionIds = userSessions.map((s) => s.id);
@@ -660,7 +738,7 @@ export async function getUsersWithSessions(): Promise<UserWithSessions[]> {
     });
 
     // Map users with their stats
-    const usersWithStats: UserWithSessions[] = users.map((user) => {
+    const usersWithStats: UserWithSessions[] = typedUsers.map((user) => {
       const userSessions = sessionsByUser.get(user.id) || [];
       const totalDistance = userSessions.reduce(
         (sum, s) => sum + (s.total_distance_km || 0),

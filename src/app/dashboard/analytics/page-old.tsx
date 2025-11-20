@@ -397,7 +397,9 @@ export default function AnalyticsPage() {
                       outerRadius={100}
                       label={(entry: PieLabelRenderProps) => {
                         const data = runTypeData[entry.index || 0];
-                        return data ? `${data.runType} (${data.percentage}%)` : '';
+                        return data
+                          ? `${data.runType} (${data.percentage}%)`
+                          : "";
                       }}
                     >
                       {runTypeData.map((_, index) => (

@@ -55,22 +55,19 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import {
-  getUserSessions,
-  deleteSession,
-  SessionData,
-} from "@/lib/supabase/session-queries";
+import { SessionData } from "@/lib/supabase/session-queries";
 
 interface UserSessionsPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default function UserSessionsPage({ params }: UserSessionsPageProps) {
   const router = useRouter();
   const { toast } = useToast();
 
+  const [userId, setUserId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -79,12 +76,26 @@ export default function UserSessionsPage({ params }: UserSessionsPageProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
 
+  // Unwrap params
+  useEffect(() => {
+    params.then(({ id }) => setUserId(id));
+  }, [params]);
+
   const fetchUserSessions = useCallback(async () => {
+    if (!userId) return;
+
     setLoading(true);
     try {
-      console.log(`🔍 Fetching sessions for user ${params.id}...`);
+      console.log(`🔍 Fetching sessions for user ${userId}...`);
 
-      const sessionsData = await getUserSessions(params.id);
+      // ✅ Use API route instead of direct database query
+      const response = await fetch(`/api/sessions/${userId}`);
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const { sessions: sessionsData } = await response.json();
 
       console.log(`✅ Loaded ${sessionsData.length} sessions`);
       setSessions(sessionsData);
@@ -108,11 +119,13 @@ export default function UserSessionsPage({ params }: UserSessionsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [params.id, toast]);
+  }, [userId, toast]);
 
   useEffect(() => {
-    fetchUserSessions();
-  }, [fetchUserSessions]);
+    if (userId) {
+      fetchUserSessions();
+    }
+  }, [fetchUserSessions, userId]);
 
   // Format helper functions
   const formatDuration = (seconds: number | null) => {
@@ -158,7 +171,9 @@ export default function UserSessionsPage({ params }: UserSessionsPageProps) {
   const userEmail = sessions.length > 0 ? sessions[0].user_email : "";
 
   const handleViewDetails = (sessionId: string) => {
-    router.push(`/dashboard/sessions/${params.id}/session/${sessionId}`);
+    if (userId) {
+      router.push(`/dashboard/sessions/${userId}/session/${sessionId}`);
+    }
   };
 
   const handleDeleteClick = (sessionId: string) => {
@@ -170,7 +185,15 @@ export default function UserSessionsPage({ params }: UserSessionsPageProps) {
     if (!sessionToDelete) return;
 
     try {
-      await deleteSession(sessionToDelete);
+      // ✅ Use API route to delete session
+      const response = await fetch(`/api/sessions/detail/${sessionToDelete}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete session");
+      }
 
       toast({
         title: "Session Deleted",
@@ -210,7 +233,20 @@ export default function UserSessionsPage({ params }: UserSessionsPageProps) {
         );
       },
       cell: ({ row }) => {
-        const date = new Date(row.getValue("started_at"));
+        const startedAt = row.getValue("started_at") as string | null;
+        if (!startedAt) {
+          return (
+            <div>
+              <div className="text-sm font-medium text-gray-500 dark:text-gray-500">
+                No date
+              </div>
+              <div className="text-xs text-gray-400 dark:text-gray-600">
+                Pending
+              </div>
+            </div>
+          );
+        }
+        const date = new Date(startedAt);
         return (
           <div>
             <div className="text-sm font-medium text-gray-900 dark:text-white">

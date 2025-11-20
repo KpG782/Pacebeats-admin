@@ -130,7 +130,7 @@ export type SessionHeartRateDataUpdate = Partial<SessionHeartRateDataInsert>;
 export interface RunningSession {
   id: string; // uuid - PRIMARY KEY
   user_id: string; // uuid - foreign key to users
-  start_time: string; // timestamptz
+  start_time: string | null; // timestamptz - nullable for incomplete sessions
   end_time: string | null; // timestamptz
   distance_meters: number | null; // float
   duration_seconds: number | null; // integer

@@ -59,44 +59,19 @@ export default function IoTMonitorPage() {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const { toast } = useToast();
 
-  // Load active runners from database
+  // Load active runners from database (via API route with admin access)
   const loadActiveRunners = useCallback(async () => {
     try {
-      console.log("🔍 Loading active runners...");
+      console.log("🔍 Loading active runners (admin mode)...");
 
-      // Get active sessions with user info
-      // FIXED: Query both current_* (real-time) and total_* (aggregate) columns
-      const { data: sessions, error: sessionsError } = await supabase
-        .from("running_sessions")
-        .select(
-          `
-          id,
-          user_id,
-          session_start_time,
-          session_duration_seconds,
-          elapsed_time_seconds,
-          total_distance_km,
-          current_distance_km,
-          avg_pace_min_per_km,
-          current_pace_min_per_km,
-          avg_heart_rate_bpm,
-          avg_speed_kmh,
-          status,
-          last_heartbeat_at,
-          users!inner (
-            username,
-            email
-          )
-        `
-        )
-        .eq("status", "active")
-        .order("last_heartbeat_at", { ascending: false })
-        .limit(50);
+      // ✅ Use API route with service_role_key (bypasses RLS)
+      const response = await fetch("/api/iot-monitor/active-runners");
 
-      if (sessionsError) {
-        console.error("❌ Sessions query error:", sessionsError);
-        throw sessionsError;
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
       }
+
+      const { sessions, heartRates, alerts } = await response.json();
 
       console.log(`📊 Found ${sessions?.length || 0} active sessions`);
 
@@ -107,48 +82,29 @@ export default function IoTMonitorPage() {
         return;
       }
 
-      // Get latest heart rate for each session
-      const sessionIds = sessions.map((s) => s.id);
-
-      const { data: latestHR, error: hrError } = await supabase
-        .from("session_heart_rate_data")
-        .select("session_id, heart_rate_bpm, recorded_at")
-        .in("session_id", sessionIds)
-        .order("recorded_at", { ascending: false });
-
-      if (hrError) {
-        console.error("❌ HR query error:", hrError);
-      } else {
-        console.log(`💓 Found ${latestHR?.length || 0} heart rate readings`);
-      }
-
-      // Get alerts for each session
-      const { data: alerts, error: alertsError } = await supabase
-        .from("heart_rate_alerts")
-        .select("session_id, severity")
-        .in("session_id", sessionIds)
-        .eq("resolved", false);
-
-      if (alertsError) {
-        console.error("❌ Alerts query error:", alertsError);
-      } else {
-        console.log(`🚨 Found ${alerts?.length || 0} unresolved alerts`);
-      }
+      console.log(`💓 Found ${heartRates?.length || 0} heart rate readings`);
+      console.log(`🚨 Found ${alerts?.length || 0} alerts`);
 
       // Map to latest HR per session
       const hrMap = new Map();
-      latestHR?.forEach((hr) => {
-        if (!hrMap.has(hr.session_id)) {
-          hrMap.set(hr.session_id, hr);
+      heartRates?.forEach(
+        (hr: {
+          session_id: string;
+          heart_rate_bpm: number;
+          recorded_at: string;
+        }) => {
+          if (!hrMap.has(hr.session_id)) {
+            hrMap.set(hr.session_id, hr);
+          }
         }
-      });
+      );
 
       // Map alerts per session
       const alertsMap = new Map<
         string,
         { count: number; latestSeverity: string | null }
       >();
-      alerts?.forEach((alert) => {
+      alerts?.forEach((alert: { session_id: string; severity: string }) => {
         const existing = alertsMap.get(alert.session_id) || {
           count: 0,
           latestSeverity: null,
@@ -164,17 +120,25 @@ export default function IoTMonitorPage() {
           id: string;
           user_id: string;
           session_start_time: string;
+          session_end_time: string | null;
           session_duration_seconds: number;
-          elapsed_time_seconds: number;
-          total_distance_km: number;
-          current_distance_km: number;
-          avg_pace_min_per_km: number;
-          current_pace_min_per_km: number;
-          avg_heart_rate_bpm: number;
-          avg_speed_kmh: number;
+          run_type: string;
+          total_distance_km: number | null;
+          current_distance_km: number | null;
+          avg_pace_min_per_km: number | null;
+          current_pace_min_per_km: number | null;
+          avg_heart_rate_bpm: number | null;
+          max_heart_rate_bpm: number | null;
+          avg_speed_kmh: number | null;
+          calories_burned: number | null;
           status: string;
-          last_heartbeat_at: string;
-          users: { username: string; email: string }[];
+          elapsed_time_seconds: number | null;
+          last_heartbeat_at: string | null;
+          created_at: string;
+          updated_at: string;
+          users:
+            | { username: string; email: string }
+            | { username: string; email: string }[];
         }) => {
           const latestHRData = hrMap.get(session.id);
           const heartRate =
@@ -182,6 +146,7 @@ export default function IoTMonitorPage() {
           const lastHRTime =
             latestHRData?.recorded_at ||
             session.last_heartbeat_at ||
+            session.updated_at ||
             session.session_start_time;
           const secondsSinceUpdate = Math.floor(
             (Date.now() - new Date(lastHRTime).getTime()) / 1000
@@ -191,11 +156,11 @@ export default function IoTMonitorPage() {
           if (secondsSinceUpdate < 10) connectionStatus = "LIVE";
           else if (secondsSinceUpdate < 30) connectionStatus = "SLOW";
 
-          // Use current_* for real-time data (from Android app), fallback to total_* for aggregate
+          // Use current_* for real-time data (updated by mobile app), fallback to total_* for final/aggregate
           const distanceKm =
             session.current_distance_km || session.total_distance_km || 0;
           const pace =
-            session.current_pace_min_per_km || session.avg_pace_min_per_km;
+            session.current_pace_min_per_km || session.avg_pace_min_per_km || 0;
           const speed = pace ? 60 / pace : session.avg_speed_kmh || 0;
           const duration =
             session.elapsed_time_seconds ||

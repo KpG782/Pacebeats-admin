@@ -45,10 +45,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import {
-  getUsersWithSessions,
-  UserWithSessions,
-} from "@/lib/supabase/session-queries";
+import { UserWithSessions } from "@/lib/supabase/session-queries";
 import { debugSessionsQuery } from "@/lib/supabase/debug-sessions";
 
 export default function SessionsPage() {
@@ -67,7 +64,14 @@ export default function SessionsPage() {
     try {
       console.log("🔍 Fetching users with sessions...");
 
-      const usersData = await getUsersWithSessions();
+      // ✅ Use API route instead of direct database query
+      const response = await fetch("/api/sessions/users");
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const { users: usersData } = await response.json();
 
       console.log(`✅ Loaded ${usersData.length} users`);
       setUsers(usersData);

@@ -29,17 +29,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  getSessionDetail,
-  type SessionDetail,
-} from "@/lib/supabase/session-queries";
+import { type SessionDetail } from "@/lib/supabase/session-queries";
 import { useToast } from "@/components/ui/use-toast";
 
 interface SessionDetailPageProps {
-  params: {
+  params: Promise<{
     id: string;
     sessionId: string;
-  };
+  }>;
 }
 
 export default function SessionDetailPage({ params }: SessionDetailPageProps) {
@@ -47,17 +44,33 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
   const { toast } = useToast();
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    params.then(({ id, sessionId }) => {
+      setUserId(id);
+      setSessionId(sessionId);
+    });
+  }, [params]);
 
   useEffect(() => {
     async function loadSessionData() {
+      if (!userId || !sessionId) return;
+
       setLoading(true);
 
       try {
-        console.log(
-          `🔍 Fetching session ${params.sessionId} for user ${params.id}...`
-        );
+        console.log(`🔍 Fetching session ${sessionId} for user ${userId}...`);
 
-        const sessionDetail = await getSessionDetail(params.sessionId);
+        // ✅ Use API route instead of direct database query
+        const response = await fetch(`/api/sessions/detail/${sessionId}`);
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.statusText}`);
+        }
+
+        const { session: sessionDetail } = await response.json();
 
         if (!sessionDetail) {
           toast({
@@ -70,14 +83,14 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
         }
 
         // Verify the session belongs to the user
-        if (sessionDetail.user_id !== params.id) {
+        if (sessionDetail.user_id !== userId) {
           console.error("❌ Session does not belong to this user");
           toast({
             title: "Access Denied",
             description: "This session does not belong to the specified user.",
             variant: "destructive",
           });
-          router.push(`/dashboard/sessions/${params.id}`);
+          router.push(`/dashboard/sessions/${userId}`);
           return;
         }
 
@@ -97,7 +110,7 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
     }
 
     loadSessionData();
-  }, [params.sessionId, params.id, toast, router]);
+  }, [sessionId, userId, toast, router]);
 
   if (loading) {
     return (
@@ -117,7 +130,9 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push(`/dashboard/sessions/${params.id}`)}
+            onClick={() =>
+              userId && router.push(`/dashboard/sessions/${userId}`)
+            }
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -130,7 +145,9 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
             </p>
             <div className="flex justify-center mt-4">
               <Button
-                onClick={() => router.push(`/dashboard/sessions/${params.id}`)}
+                onClick={() =>
+                  userId && router.push(`/dashboard/sessions/${userId}`)
+                }
               >
                 Back to User Sessions
               </Button>
@@ -157,7 +174,8 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  const formatDate = (date: string) => {
+  const formatDate = (date: string | null) => {
+    if (!date) return "No date available";
     return new Date(date).toLocaleString();
   };
 
@@ -184,7 +202,9 @@ export default function SessionDetailPage({ params }: SessionDetailPageProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push(`/dashboard/sessions/${params.id}`)}
+            onClick={() =>
+              userId && router.push(`/dashboard/sessions/${userId}`)
+            }
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>

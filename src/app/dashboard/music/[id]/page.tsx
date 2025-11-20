@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -137,12 +138,13 @@ export default function MusicDetailPage({ params }: MusicDetailPageProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardContent className="p-6">
-            <div className="aspect-square bg-gradient-to-br from-primary/20 to-primary/5 rounded-lg flex items-center justify-center mb-4">
+            <div className="aspect-square bg-gradient-to-br from-primary/20 to-primary/5 rounded-lg flex items-center justify-center mb-4 relative overflow-hidden">
               {track.cover_image_url ? (
-                <img
+                <Image
                   src={track.cover_image_url}
                   alt={track.track_name}
-                  className="w-full h-full object-cover rounded-lg"
+                  fill
+                  className="object-cover rounded-lg"
                 />
               ) : (
                 <Play className="h-24 w-24 text-primary opacity-50" />
