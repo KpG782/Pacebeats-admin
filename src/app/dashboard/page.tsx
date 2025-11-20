@@ -18,9 +18,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { enhancedAnalyticsData } from "@/lib/enhanced-analytics-data";
-import {
-  enhancedMusicTracks,
-} from "@/lib/enhanced-music-data";
+import { enhancedMusicTracks } from "@/lib/enhanced-music-data";
 import { enhancedMockUsers } from "@/lib/enhanced-mock-data";
 import { enhancedMockSessions } from "@/lib/enhanced-session-data";
 import { formatDistanceToNow } from "date-fns";

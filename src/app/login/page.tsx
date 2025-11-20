@@ -9,9 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Moon, Sun } from "lucide-react";
+import { signInWithEmail, onAuthStateChange } from "@/lib/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +29,22 @@ export default function LoginPage() {
     if (isDark) {
       document.documentElement.classList.add("dark");
     }
-  }, []);
+
+    // Check if user is already logged in
+    const checkAuth = async () => {
+      const { data } = await onAuthStateChange((event, session) => {
+        if (session && event === "SIGNED_IN") {
+          router.push("/dashboard");
+        }
+      });
+
+      return () => {
+        data.subscription.unsubscribe();
+      };
+    };
+
+    checkAuth();
+  }, [router]);
 
   const toggleDarkMode = () => {
     const newMode = !isDarkMode;
@@ -77,55 +95,60 @@ export default function LoginPage() {
 
     setIsLoading(true);
 
-    // TODO: Replace with actual API call
-    // Example:
-    // try {
-    //   const response = await fetch('/api/auth/login', {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify({ email, password, rememberMe })
-    //   });
-    //
-    //   if (!response.ok) {
-    //     throw new Error('Invalid credentials');
-    //   }
-    //
-    //   const data = await response.json();
-    //   localStorage.setItem('authToken', data.token);
-    //   localStorage.setItem('adminUser', JSON.stringify(data.user));
-    //   router.push('/dashboard');
-    // } catch (error) {
-    //   setErrors({ ...errors, password: 'Invalid email or password' });
-    //   setIsLoading(false);
-    // }
+    try {
+      // Supabase authentication
+      const { user } = await signInWithEmail(email, password);
 
-    // Simulate API call - Remove this in production
-    setTimeout(() => {
-      // Mock success - store token for demo
-      localStorage.setItem("authToken", "mock_token_" + Date.now());
+      // Store session info if remember me is checked
+      if (rememberMe) {
+        localStorage.setItem("rememberMe", "true");
+      }
+
+      // Store user info for admin dashboard
       localStorage.setItem(
         "adminUser",
         JSON.stringify({
-          id: "ADM001",
-          name: "Admin User",
-          email: email,
-          role: "super_admin",
+          id: user.id,
+          email: user.email,
+          role: user.user_metadata?.role || "admin",
         })
       );
 
-      setIsLoading(false);
+      toast({
+        title: "Login Successful",
+        description: `Welcome back, ${user.email}!`,
+      });
+
+      // Redirect to dashboard
       router.push("/dashboard");
-    }, 1500);
+    } catch (error) {
+      console.error("Login error:", error);
+
+      const errorMessage =
+        error instanceof Error ? error.message : "Invalid email or password";
+
+      setErrors({ ...errors, password: errorMessage });
+
+      toast({
+        title: "Login Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+
+      setIsLoading(false);
+    }
   };
 
   // Handle forgot password - Ready for backend integration
   const handleForgotPassword = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    // TODO: Navigate to forgot password page or show modal
-    // router.push('/forgot-password');
-    alert(
-      "Forgot password functionality will be implemented with backend integration"
-    );
+    // TODO: Implement password reset with Supabase
+    // Example:
+    // const { error } = await supabase.auth.resetPasswordForEmail(email);
+    toast({
+      title: "Password Reset",
+      description: "Password reset functionality will be available soon.",
+    });
   };
 
   // Handle contact support - Ready for backend integration

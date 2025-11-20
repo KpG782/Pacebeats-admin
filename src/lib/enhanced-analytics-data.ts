@@ -22,8 +22,7 @@ import type {
 // Calculate Dashboard Stats from real data
 export const dashboardStats: DashboardStats = {
   totalUsers: enhancedMockUsers.length,
-  activeUsers: enhancedMockUsers.filter((u) => u.status === "active")
-    .length,
+  activeUsers: enhancedMockUsers.filter((u) => u.status === "active").length,
   totalSessions: enhancedMockSessions.length,
   activeSessions: enhancedMockSessions.filter((s) => s.status === "active")
     .length,
@@ -33,8 +32,10 @@ export const dashboardStats: DashboardStats = {
     0
   ),
   avgSessionDuration:
-    enhancedMockSessions.reduce((sum: number, s) => sum + s.duration_seconds, 0) /
-    enhancedMockSessions.length,
+    enhancedMockSessions.reduce(
+      (sum: number, s) => sum + s.duration_seconds,
+      0
+    ) / enhancedMockSessions.length,
   userRetentionRate: 87.3,
   avgSongsPerSession: 12.4,
   avgCompletionRate:
@@ -378,8 +379,10 @@ export const getTotalPlays = (): number => {
 
 export const getAverageSessionDuration = (): number => {
   return (
-    enhancedMockSessions.reduce((sum: number, s) => sum + s.duration_seconds, 0) /
-    enhancedMockSessions.length
+    enhancedMockSessions.reduce(
+      (sum: number, s) => sum + s.duration_seconds,
+      0
+    ) / enhancedMockSessions.length
   );
 };
 

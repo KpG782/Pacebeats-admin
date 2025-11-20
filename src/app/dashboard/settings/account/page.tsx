@@ -12,13 +12,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import {
-  Bell,
-  Mail,
-  Globe,
-  Trash2,
-  AlertTriangle,
-} from "lucide-react";
+import { Bell, Mail, Globe, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import {
   AlertDialog,

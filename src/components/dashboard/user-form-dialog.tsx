@@ -189,9 +189,9 @@ export function UserFormDialog({
               <Label htmlFor="status">Status</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value: "active" | "inactive" | "suspended" | "deleted") =>
-                  setFormData({ ...formData, status: value })
-                }
+                onValueChange={(
+                  value: "active" | "inactive" | "suspended" | "deleted"
+                ) => setFormData({ ...formData, status: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -216,9 +216,9 @@ export function UserFormDialog({
                 <Label htmlFor="gender">Gender</Label>
                 <Select
                   value={formData.gender}
-                  onValueChange={(value: "male" | "female" | "other" | "prefer_not_to_say") =>
-                    setFormData({ ...formData, gender: value })
-                  }
+                  onValueChange={(
+                    value: "male" | "female" | "other" | "prefer_not_to_say"
+                  ) => setFormData({ ...formData, gender: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
@@ -337,9 +337,9 @@ export function UserFormDialog({
                 <Label htmlFor="running_experience">Experience Level</Label>
                 <Select
                   value={formData.running_experience}
-                  onValueChange={(value: "beginner" | "intermediate" | "advanced") =>
-                    setFormData({ ...formData, running_experience: value })
-                  }
+                  onValueChange={(
+                    value: "beginner" | "intermediate" | "advanced"
+                  ) => setFormData({ ...formData, running_experience: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select level" />
