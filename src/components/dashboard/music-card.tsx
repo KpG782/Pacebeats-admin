@@ -3,30 +3,38 @@
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Music as MusicIcon, Edit, Trash2 } from "lucide-react";
+import { Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Music } from "@/lib/mock-data";
+import type { MusicTrack } from "@/lib/types/music";
+import { useRouter } from "next/navigation";
 
 interface MusicCardProps {
-  track: Music;
+  track: MusicTrack;
   index: number;
-  onEdit?: (track: Music) => void;
-  onDelete?: (track: Music) => void;
+  onEdit?: (track: MusicTrack) => void;
+  onDelete?: (track: MusicTrack) => void;
 }
 
 export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
+  const router = useRouter();
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: index * 0.05 }}
       whileHover={{ y: -4 }}
-      className="group"
+      className="group cursor-pointer"
+      onClick={() => router.push(`/dashboard/music/${track.id}`)}
     >
       <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:shadow-lg transition-all overflow-hidden">
-        {/* Album Cover Placeholder */}
-        <div className="relative h-48 bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-          <MusicIcon className="h-16 w-16 text-primary-foreground opacity-50" />
+        {/* Album Cover */}
+        <div className="relative h-48 overflow-hidden">
+          <img
+            src={track.cover_image_url}
+            alt={track.track_name}
+            className="w-full h-full object-cover"
+          />
 
           {/* Hover Actions */}
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -34,7 +42,10 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
               size="icon"
               variant="ghost"
               className="bg-white/20 hover:bg-white/30 text-white"
-              onClick={() => onEdit?.(track)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit?.(track);
+              }}
             >
               <Edit className="h-4 w-4" />
             </Button>
@@ -42,7 +53,10 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
               size="icon"
               variant="ghost"
               className="bg-white/20 hover:bg-white/30 text-white"
-              onClick={() => onDelete?.(track)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete?.(track);
+              }}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -52,10 +66,10 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
         <CardContent className="p-4">
           {/* Title & Artist */}
           <h3 className="font-semibold text-gray-900 dark:text-white truncate">
-            {track.title}
+            {track.track_name}
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 truncate mb-3">
-            {track.artist}
+            {track.artist_name}
           </p>
 
           {/* Badges */}
@@ -69,12 +83,15 @@ export function MusicCard({ track, index, onEdit, onDelete }: MusicCardProps) {
             <Badge variant="outline" className="text-xs">
               {track.mood}
             </Badge>
+            <Badge variant="outline" className="text-xs">
+              Energy: {track.energy_level}/10
+            </Badge>
           </div>
 
           {/* Stats */}
           <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
             <span>{track.bpm} BPM</span>
-            <span>{track.playCount.toLocaleString()} plays</span>
+            <span>{track.total_plays.toLocaleString()} plays</span>
           </div>
         </CardContent>
       </Card>
