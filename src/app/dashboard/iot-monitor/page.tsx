@@ -87,24 +87,18 @@ export default function IoTMonitorPage() {
 
       // Map to latest HR per session
       const hrMap = new Map();
-      heartRates?.forEach(
-        (hr: {
-          session_id: string;
-          heart_rate_bpm: number;
-          recorded_at: string;
-        }) => {
-          if (!hrMap.has(hr.session_id)) {
-            hrMap.set(hr.session_id, hr);
-          }
+      for (const hr of heartRates || []) {
+        if (!hrMap.has(hr.session_id)) {
+          hrMap.set(hr.session_id, hr);
         }
-      );
+      }
 
       // Map alerts per session
       const alertsMap = new Map<
         string,
         { count: number; latestSeverity: string | null }
       >();
-      alerts?.forEach((alert: { session_id: string; severity: string }) => {
+      for (const alert of alerts || []) {
         const existing = alertsMap.get(alert.session_id) || {
           count: 0,
           latestSeverity: null,
@@ -113,7 +107,7 @@ export default function IoTMonitorPage() {
           count: existing.count + 1,
           latestSeverity: alert.severity,
         });
-      });
+      }
 
       const mappedRunners: Runner[] = sessions.map(
         (session: {
@@ -129,6 +123,7 @@ export default function IoTMonitorPage() {
           current_pace_min_per_km: number | null;
           avg_heart_rate_bpm: number | null;
           max_heart_rate_bpm: number | null;
+          current_heart_rate_bpm: number | null; // ✅ Real-time HR from mobile
           avg_speed_kmh: number | null;
           calories_burned: number | null;
           status: string;
@@ -141,8 +136,12 @@ export default function IoTMonitorPage() {
             | { username: string; email: string }[];
         }) => {
           const latestHRData = hrMap.get(session.id);
+          // ✅ Priority: current_heart_rate_bpm (real-time from mobile) > session_heart_rate_data > avg
           const heartRate =
-            latestHRData?.heart_rate_bpm || session.avg_heart_rate_bpm || 0;
+            session.current_heart_rate_bpm ||
+            latestHRData?.heart_rate_bpm ||
+            session.avg_heart_rate_bpm ||
+            0;
           const lastHRTime =
             latestHRData?.recorded_at ||
             session.last_heartbeat_at ||
@@ -717,21 +716,32 @@ export default function IoTMonitorPage() {
       </div>
 
       {/* Empty State */}
-      {filteredRunners.length === 0 && (
-        <Card className="p-8 sm:p-12 text-center">
-          <User className="h-12 w-12 sm:h-16 sm:w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400 text-base sm:text-lg font-medium">
-            {runners.length === 0 ? "No active runners" : "No runners found"}
-          </p>
-          <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">
-            {runners.length === 0
-              ? "Start a running session on your mobile app to see live data"
-              : searchQuery
-              ? "Try adjusting your search"
-              : "No runners match the selected filter"}
-          </p>
-        </Card>
-      )}
+      {filteredRunners.length === 0 &&
+        (() => {
+          const hasNoRunners = runners.length === 0;
+          const emptyStateMessage = hasNoRunners
+            ? "No active runners"
+            : "No runners found";
+          let detailMessage = "No runners match the selected filter";
+          if (hasNoRunners) {
+            detailMessage =
+              "Start a running session on your mobile app to see live data";
+          } else if (searchQuery) {
+            detailMessage = "Try adjusting your search";
+          }
+
+          return (
+            <Card className="p-8 sm:p-12 text-center">
+              <User className="h-12 w-12 sm:h-16 sm:w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+              <p className="text-gray-500 dark:text-gray-400 text-base sm:text-lg font-medium">
+                {emptyStateMessage}
+              </p>
+              <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">
+                {detailMessage}
+              </p>
+            </Card>
+          );
+        })()}
 
       {/* Critical Alert Banner - Mobile Sticky */}
       {criticalRunners > 0 && (

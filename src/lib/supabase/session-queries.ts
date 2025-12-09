@@ -23,6 +23,7 @@ interface RunningSessionRow {
   max_heart_rate_bpm?: number | null;
   min_heart_rate_bpm?: number | null;
   avg_speed_kmh?: number | null;
+  current_heart_rate_bpm?: number | null; // ✅ Real-time heart rate from mobile app
   run_type?: string;
   selected_emotion?: string | null;
   selected_playlist?: string | null;

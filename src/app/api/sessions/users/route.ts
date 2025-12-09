@@ -28,17 +28,27 @@ const getAdminClient = () => {
   });
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     console.log("🔍 [API] Fetching users with session statistics...");
 
+    // ✅ Parse query parameters for pagination
+    const { searchParams } = new URL(request.url);
+    const limit = Number.parseInt(searchParams.get("limit") || "100", 10);
+    const offset = Number.parseInt(searchParams.get("offset") || "0", 10);
+
     const supabaseAdmin = getAdminClient();
 
-    // Fetch all users
-    const { data: users, error: usersError } = await supabaseAdmin
+    // ✅ Fetch users with pagination and limit
+    const {
+      data: users,
+      error: usersError,
+      count,
+    } = await supabaseAdmin
       .from("users")
-      .select("id, email, username, created_at")
-      .order("created_at", { ascending: false });
+      .select("id, email, username, created_at", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (usersError) {
       console.error("❌ [API] Error fetching users:", usersError);
@@ -53,12 +63,17 @@ export async function GET() {
       return NextResponse.json({ users: [] });
     }
 
-    console.log(`📊 [API] Found ${users.length} users`);
+    console.log(`📊 [API] Found ${users.length} users (total: ${count})`);
 
-    // Fetch all sessions
+    // ✅ Fetch only necessary session fields for better performance
+    const userIds = users.map((u) => u.id);
     const { data: sessions, error: sessionsError } = await supabaseAdmin
       .from("running_sessions")
-      .select("*");
+      .select(
+        "id, user_id, total_distance_km, session_duration_seconds, avg_heart_rate_bpm, session_start_time, created_at"
+      )
+      .in("user_id", userIds)
+      .order("session_start_time", { ascending: false });
 
     if (sessionsError) {
       console.warn("⚠️ [API] Error fetching sessions:", sessionsError);
@@ -83,25 +98,25 @@ export async function GET() {
 
     // Group sessions by user
     const sessionsByUser = new Map<string, typeof sessions>();
-    (sessions || []).forEach((session) => {
+    for (const session of sessions || []) {
       if (!sessionsByUser.has(session.user_id)) {
         sessionsByUser.set(session.user_id, []);
       }
       sessionsByUser.get(session.user_id)!.push(session);
-    });
+    }
 
     // Count music tracks per user
     const musicCountByUser = new Map<string, number>();
-    (sessions || []).forEach((session) => {
+    for (const session of sessions || []) {
       if (!musicCountByUser.has(session.user_id)) {
         const userSessions = sessionsByUser.get(session.user_id) || [];
-        const userSessionIds = userSessions.map((s) => s.id);
+        const userSessionIds = new Set(userSessions.map((s) => s.id));
         const count = musicData.filter((m) =>
-          userSessionIds.includes(m.session_id)
+          userSessionIds.has(m.session_id)
         ).length;
         musicCountByUser.set(session.user_id, count);
       }
-    });
+    }
 
     // Map users with their stats
     const usersWithStats = users.map((user) => {
@@ -152,7 +167,23 @@ export async function GET() {
 
     console.log(`✅ [API] Processed ${usersWithStats.length} users with stats`);
 
-    return NextResponse.json({ users: usersWithStats });
+    return NextResponse.json(
+      {
+        users: usersWithStats,
+        pagination: {
+          total: count || 0,
+          limit,
+          offset,
+          hasMore: offset + limit < (count || 0),
+        },
+      },
+      {
+        headers: {
+          // ✅ Cache for 30 seconds to improve performance
+          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (error) {
     console.error("❌ [API] Unexpected error:", error);
     return NextResponse.json(

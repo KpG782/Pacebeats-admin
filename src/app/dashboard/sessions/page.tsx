@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -64,16 +64,21 @@ export default function SessionsPage() {
     try {
       console.log("🔍 Fetching users with sessions...");
 
-      // ✅ Use API route instead of direct database query
-      const response = await fetch("/api/sessions/users");
+      // ✅ Use API route with pagination for better performance
+      const response = await fetch("/api/sessions/users?limit=100&offset=0");
 
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
       }
 
-      const { users: usersData } = await response.json();
+      const { users: usersData, pagination: paginationData } =
+        await response.json();
 
-      console.log(`✅ Loaded ${usersData.length} users`);
+      console.log(
+        `✅ Loaded ${usersData.length} users (total: ${
+          paginationData?.total || 0
+        })`
+      );
       setUsers(usersData);
 
       // Show info if no users found
@@ -118,26 +123,31 @@ export default function SessionsPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Format helper functions
-  const formatDuration = (seconds: number) => {
+  // Format helper functions (memoized)
+  const formatDuration = useCallback((seconds: number) => {
     if (seconds < 60) return "< 1m";
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     if (hrs > 0) return `${hrs}h ${mins}m`;
     return `${mins}m`;
-  };
+  }, []);
 
-  const formatDistance = (km: number) => {
+  const formatDistance = useCallback((km: number) => {
     if (km < 1) return `${(km * 1000).toFixed(0)}m`;
     return `${km.toFixed(2)}km`;
-  };
+  }, []);
 
-  // Calculate stats
-  const totalUsers = users.length;
-  const activeUsers = users.filter((u) => u.total_sessions > 0).length;
-  const totalSessions = users.reduce((sum, u) => sum + u.total_sessions, 0);
-  const totalDistance = users.reduce((sum, u) => sum + u.total_distance_km, 0);
-  const totalSongs = users.reduce((sum, u) => sum + u.total_songs, 0);
+  // Calculate stats (memoized)
+  const stats = useMemo(
+    () => ({
+      totalUsers: users.length,
+      activeUsers: users.filter((u) => u.total_sessions > 0).length,
+      totalSessions: users.reduce((sum, u) => sum + u.total_sessions, 0),
+      totalDistance: users.reduce((sum, u) => sum + u.total_distance_km, 0),
+      totalSongs: users.reduce((sum, u) => sum + u.total_songs, 0),
+    }),
+    [users]
+  );
 
   const handleViewUserSessions = (userId: string) => {
     router.push(`/dashboard/sessions/${userId}`);
@@ -183,7 +193,7 @@ export default function SessionsPage() {
     );
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
 
     toast({
       title: "Export Successful",
@@ -191,172 +201,184 @@ export default function SessionsPage() {
     });
   };
 
-  const columns: ColumnDef<UserWithSessions>[] = [
-    {
-      accessorKey: "user_name",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            User
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => (
-        <div>
-          <div className="font-medium text-gray-900 dark:text-white">
-            {row.original.user_name}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            {row.original.user_email}
-          </div>
-        </div>
-      ),
-    },
-    {
-      accessorKey: "total_sessions",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            Sessions
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => (
-        <div className="text-center">
-          <Badge
-            variant={row.original.total_sessions > 0 ? "default" : "outline"}
-            className="text-sm"
-          >
-            {row.original.total_sessions}
-          </Badge>
-        </div>
-      ),
-    },
-    {
-      accessorKey: "total_distance_km",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            Distance
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => (
-        <span className="font-semibold text-primary">
-          {formatDistance(row.original.total_distance_km)}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "total_duration_seconds",
-      header: "Duration",
-      cell: ({ row }) => (
-        <span className="text-sm">
-          {formatDuration(row.original.total_duration_seconds)}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "avg_heart_rate_bpm",
-      header: "Avg HR",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {row.original.avg_heart_rate_bpm > 0 ? (
-            <Badge
-              variant="outline"
-              className="flex items-center gap-1 w-fit mx-auto"
+  // Memoize columns to prevent unnecessary re-renders
+  const columns: ColumnDef<UserWithSessions>[] = useMemo(
+    () => [
+      {
+        accessorKey: "user_name",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="hover:bg-gray-100 dark:hover:bg-gray-800"
             >
-              ❤️ {row.original.avg_heart_rate_bpm}
-            </Badge>
-          ) : (
-            <span className="text-gray-400">-</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      accessorKey: "total_songs",
-      header: "Songs",
-      cell: ({ row }) => (
-        <div className="text-center text-sm">
-          {row.original.total_songs > 0 ? (
-            <span className="flex items-center gap-1 justify-center">
-              🎵 {row.original.total_songs}
-            </span>
-          ) : (
-            <span className="text-gray-400">-</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      accessorKey: "last_session_date",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            Last Activity
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        const date = new Date(row.original.last_session_date);
-        return (
+              User
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => (
           <div>
-            <div className="text-sm font-medium text-gray-900 dark:text-white">
-              {format(date, "MMM dd, yyyy")}
+            <div className="font-medium text-gray-900 dark:text-white">
+              {row.original.user_name}
             </div>
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              {format(date, "h:mm a")}
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              {row.original.user_email}
             </div>
           </div>
-        );
+        ),
       },
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => {
-        const user = row.original;
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => handleViewUserSessions(user.user_id)}
-                disabled={user.total_sessions === 0}
+      {
+        accessorKey: "total_sessions",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Sessions
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => (
+          <div className="text-center">
+            <Badge
+              variant={row.original.total_sessions > 0 ? "default" : "outline"}
+              className="text-sm"
+            >
+              {row.original.total_sessions}
+            </Badge>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "total_distance_km",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Distance
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => (
+          <span className="font-semibold text-primary">
+            {formatDistance(row.original.total_distance_km)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "total_duration_seconds",
+        header: "Duration",
+        cell: ({ row }) => (
+          <span className="text-sm">
+            {formatDuration(row.original.total_duration_seconds)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "avg_heart_rate_bpm",
+        header: "Avg HR",
+        cell: ({ row }) => (
+          <div className="text-center">
+            {row.original.avg_heart_rate_bpm > 0 ? (
+              <Badge
+                variant="outline"
+                className="flex items-center gap-1 w-fit mx-auto"
               >
-                <Eye className="mr-2 h-4 w-4" />
-                View Sessions ({user.total_sessions})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
+                ❤️ {row.original.avg_heart_rate_bpm}
+              </Badge>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </div>
+        ),
       },
-    },
-  ];
+      {
+        accessorKey: "total_songs",
+        header: "Songs",
+        cell: ({ row }) => (
+          <div className="text-center text-sm">
+            {row.original.total_songs > 0 ? (
+              <span className="flex items-center gap-1 justify-center">
+                🎵 {row.original.total_songs}
+              </span>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "last_session_date",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Last Activity
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => {
+          const date = new Date(row.original.last_session_date);
+          return (
+            <div>
+              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                {format(date, "MMM dd, yyyy")}
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">
+                {format(date, "h:mm a")}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        cell: ({ row }) => {
+          const user = row.original;
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-8 w-8 p-0">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => handleViewUserSessions(user.user_id)}
+                  disabled={user.total_sessions === 0}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  View Sessions ({user.total_sessions})
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        },
+      },
+    ],
+    [formatDistance, formatDuration, handleViewUserSessions]
+  );
 
   const table = useReactTable({
     data: users,
@@ -429,7 +451,7 @@ export default function SessionsPage() {
                   Total Users
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {totalUsers}
+                  {stats.totalUsers}
                 </p>
               </div>
               <User className="h-8 w-8 text-primary opacity-50" />
@@ -445,7 +467,7 @@ export default function SessionsPage() {
                   Active Users
                 </p>
                 <p className="text-2xl font-bold text-green-600">
-                  {activeUsers}
+                  {stats.activeUsers}
                 </p>
               </div>
               <Activity className="h-8 w-8 text-green-600 opacity-50" />
@@ -461,7 +483,7 @@ export default function SessionsPage() {
                   Total Sessions
                 </p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {totalSessions}
+                  {stats.totalSessions}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-blue-600 opacity-50" />
@@ -477,7 +499,7 @@ export default function SessionsPage() {
                   Total Distance
                 </p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {formatDistance(totalDistance)}
+                  {formatDistance(stats.totalDistance)}
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-purple-600 opacity-50" />
@@ -492,7 +514,9 @@ export default function SessionsPage() {
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   Total Songs
                 </p>
-                <p className="text-2xl font-bold text-pink-600">{totalSongs}</p>
+                <p className="text-2xl font-bold text-pink-600">
+                  {stats.totalSongs}
+                </p>
               </div>
               <Music className="h-8 w-8 text-pink-600 opacity-50" />
             </div>

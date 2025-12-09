@@ -57,6 +57,7 @@ export async function GET() {
         current_pace_min_per_km,
         avg_heart_rate_bpm,
         max_heart_rate_bpm,
+        current_heart_rate_bpm,
         avg_speed_kmh,
         calories_burned,
         status,

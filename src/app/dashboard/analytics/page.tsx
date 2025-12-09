@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/use-toast";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import {
@@ -68,21 +69,6 @@ const COLORS = [
   "oklch(0.60 0.20 320)", // Purple
   "oklch(0.70 0.22 80)", // Yellow
 ];
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-};
 
 export default function AnalyticsPage() {
   const { toast } = useToast();
@@ -183,96 +169,65 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="space-y-6"
-      >
-        <motion.div
-          variants={itemVariants}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-96" />
-          </div>
-          <Skeleton className="h-10 w-32" />
-        </motion.div>
-
-        <motion.div
-          variants={itemVariants}
-          className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-        >
-          {[...Array(4)].map((_, i) => (
-            <Card key={i} className="bg-white dark:bg-gray-900">
-              <CardHeader>
-                <Skeleton className="h-4 w-24" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-32" />
-              </CardContent>
-            </Card>
-          ))}
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Skeleton className="h-96 w-full" />
-        </motion.div>
-      </motion.div>
+      <div className="flex items-center justify-center h-[80vh]">
+        <div className="text-center space-y-4">
+          <LoadingSpinner size="lg" />
+          <p className="text-gray-600 dark:text-gray-400">
+            Loading analytics data...
+          </p>
+        </div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="flex items-center justify-center min-h-[400px]"
-      >
-        <Card className="max-w-md bg-white dark:bg-gray-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-5 w-5" />
-              Error Loading Analytics
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">{error}</p>
-            <Button onClick={() => loadAnalytics(true)} className="w-full">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      </motion.div>
+      <div className="p-6">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex items-center justify-center min-h-[400px]"
+        >
+          <Card className="max-w-md bg-white dark:bg-gray-900">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-5 w-5" />
+                Error Loading Analytics
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">{error}</p>
+              <Button onClick={() => loadAnalytics(true)} className="w-full">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
     );
   }
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="show"
-      className="space-y-6"
-    >
-      {/* Header */}
+    <div className="p-6 space-y-6">
+      {/* Page Header */}
       <motion.div
-        variants={itemVariants}
-        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Analytics
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-gray-700 dark:text-gray-300">
             Comprehensive insights into user activity and performance
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <Button
             variant="outline"
-            size="sm"
             onClick={() => loadAnalytics(true)}
             disabled={refreshing}
           >
@@ -281,7 +236,7 @@ export default function AnalyticsPage() {
             />
             Refresh
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
@@ -291,7 +246,9 @@ export default function AnalyticsPage() {
       {/* Summary Stats */}
       {summary && (
         <motion.div
-          variants={itemVariants}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
           className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
         >
           <StatsCard
@@ -330,9 +287,13 @@ export default function AnalyticsPage() {
       )}
 
       {/* Main Analytics Tabs */}
-      <motion.div variants={itemVariants}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+      >
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-4 bg-white dark:bg-gray-900">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="sessions">Sessions</TabsTrigger>
             <TabsTrigger value="music">Music</TabsTrigger>
@@ -438,9 +399,9 @@ export default function AnalyticsPage() {
                         outerRadius={100}
                         label
                       >
-                        {runTypeData.map((_, index) => (
+                        {runTypeData.map((item, index) => (
                           <Cell
-                            key={`cell-${index}`}
+                            key={`cell-${item.runType}`}
                             fill={COLORS[index % COLORS.length]}
                           />
                         ))}
@@ -755,9 +716,9 @@ export default function AnalyticsPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {musicData.topTracks.map((track, index) => (
+                      {musicData.topTracks.map((track) => (
                         <div
-                          key={index}
+                          key={`${track.title}-${track.artist}`}
                           className="flex items-center justify-between"
                         >
                           <div className="flex-1">
@@ -946,6 +907,6 @@ export default function AnalyticsPage() {
           </TabsContent>
         </Tabs>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
