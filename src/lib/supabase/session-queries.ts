@@ -99,6 +99,98 @@ export interface SessionDetail extends SessionData {
   pace_intervals: PaceInterval[];
 }
 
+interface RunningSessionRow {
+  id: string;
+  user_id: string;
+  session_start_time: string;
+  session_end_time: string | null;
+  session_duration_seconds: number | null;
+  total_distance_km: number | null;
+  total_steps: number | null;
+  avg_pace_min_per_km: number | null;
+  avg_cadence_spm: number | null;
+  avg_heart_rate_bpm: number | null;
+  max_heart_rate_bpm: number | null;
+  min_heart_rate_bpm: number | null;
+  avg_speed_kmh: number | null;
+  run_type: string | null;
+  selected_emotion: string | null;
+  selected_playlist: string | null;
+  status: string | null;
+  created_at: string;
+  users?: {
+    email?: string | null;
+    username?: string | null;
+  } | null;
+}
+
+function normalizeStatus(
+  status: string | null | undefined
+): SessionData["status"] {
+  switch (status) {
+    case "active":
+    case "completed":
+    case "paused":
+    case "cancelled":
+      return status;
+    default:
+      return "completed";
+  }
+}
+
+function mapSessionRowToSessionData(
+  session: RunningSessionRow,
+  musicStats?: {
+    total: number;
+    completed: number;
+    skipped: number;
+    liked: number;
+    disliked?: number;
+    totalTime: number;
+  }
+): SessionData {
+  const user = session.users;
+  const stats = musicStats || {
+    total: 0,
+    completed: 0,
+    skipped: 0,
+    liked: 0,
+    disliked: 0,
+    totalTime: 0,
+  };
+
+  return {
+    id: session.id,
+    session_id: session.id,
+    user_id: session.user_id,
+    user_email: user?.email || "Unknown",
+    user_name: user?.username || "Unknown User",
+    started_at: session.session_start_time,
+    ended_at: session.session_end_time,
+    duration_seconds: session.session_duration_seconds,
+    duration_minutes: Math.round((session.session_duration_seconds || 0) / 60),
+    distance_km: Number(session.total_distance_km || 0),
+    total_steps: session.total_steps || 0,
+    avg_pace_min_per_km: session.avg_pace_min_per_km,
+    avg_cadence_spm: session.avg_cadence_spm || 0,
+    avg_heart_rate_bpm: session.avg_heart_rate_bpm || 0,
+    max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
+    min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
+    avg_speed_kmh: session.avg_speed_kmh || 0,
+    total_songs: stats.total,
+    completed_songs: stats.completed,
+    skipped_songs: stats.skipped,
+    liked_songs: stats.liked,
+    disliked_songs: stats.disliked || 0,
+    total_time_ms: stats.totalTime,
+    run_type: session.run_type || "quick",
+    selected_emotion: session.selected_emotion,
+    selected_playlist: session.selected_playlist,
+    status: normalizeStatus(session.status),
+    created_at: session.created_at,
+  };
+}
+
 /**
  * Fetch all running sessions with user information
  */
@@ -116,7 +208,7 @@ export async function getAllSessions(): Promise<SessionData[]> {
           username
         )
       `)
-      .order("start_time", { ascending: false });
+      .order("session_start_time", { ascending: false });
 
     if (sessionsError) {
       console.error("❌ Error fetching sessions:", {
@@ -196,8 +288,7 @@ export async function getAllSessions(): Promise<SessionData[]> {
     });
 
     // Map to SessionData format
-    const sessionsData: SessionData[] = sessions.map((session) => {
-      const user = session.users;
+    const sessionsData: SessionData[] = (sessions as RunningSessionRow[]).map((session) => {
       const musicStats = musicBySession.get(session.id) || {
         total: 0,
         completed: 0,
@@ -207,38 +298,7 @@ export async function getAllSessions(): Promise<SessionData[]> {
         totalTime: 0,
       };
 
-      return {
-        id: session.id,
-        session_id: session.id,
-        user_id: session.user_id,
-        user_email: user?.email || "Unknown",
-        user_name: user?.username || "Unknown User",
-        started_at: session.start_time,
-        ended_at: session.end_time,
-        duration_seconds: session.duration_seconds,
-        duration_minutes: Math.round((session.duration_seconds || 0) / 60),
-        distance_km: session.distance_meters
-          ? session.distance_meters / 1000
-          : 0,
-        total_steps: session.total_steps || 0,
-        avg_pace_min_per_km: session.avg_pace_min_per_km,
-        avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm: session.avg_heart_rate || session.avg_heart_rate_bpm,
-        max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
-        min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
-        avg_speed_kmh: session.avg_speed_kmh || 0,
-        total_songs: musicStats.total,
-        completed_songs: musicStats.completed,
-        skipped_songs: musicStats.skipped,
-        liked_songs: musicStats.liked,
-        disliked_songs: musicStats.disliked,
-        total_time_ms: musicStats.totalTime,
-        run_type: session.run_type || "quick",
-        selected_emotion: session.selected_emotion,
-        selected_playlist: session.selected_playlist,
-        status: session.status || "completed",
-        created_at: session.created_at,
-      };
+      return mapSessionRowToSessionData(session, musicStats);
     });
 
     console.log(`✅ Successfully processed ${sessionsData.length} sessions`);
@@ -353,37 +413,11 @@ export async function getSessionDetail(
         ) || 0,
     };
 
-    const user = session.users;
-
     const sessionDetail: SessionDetail = {
-      id: session.id,
-      session_id: session.id,
-      user_id: session.user_id,
-      user_email: user?.email || "Unknown",
-      user_name: user?.username || "Unknown User",
-      started_at: session.start_time,
-      ended_at: session.end_time,
-      duration_seconds: session.duration_seconds,
-      duration_minutes: Math.round((session.duration_seconds || 0) / 60),
-      distance_km: session.distance_meters ? session.distance_meters / 1000 : 0,
-      total_steps: session.total_steps || 0,
-      avg_pace_min_per_km: session.avg_pace_min_per_km,
-      avg_cadence_spm: session.avg_cadence_spm || 0,
-      avg_heart_rate_bpm: session.avg_heart_rate || session.avg_heart_rate_bpm,
-      max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
-      min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
-      avg_speed_kmh: session.avg_speed_kmh || 0,
-      total_songs: musicStats.total,
-      completed_songs: musicStats.completed,
-      skipped_songs: musicStats.skipped,
-      liked_songs: musicStats.liked,
-      disliked_songs: musicStats.disliked,
-      total_time_ms: musicStats.totalTime,
-      run_type: session.run_type || "quick",
-      selected_emotion: session.selected_emotion,
-      selected_playlist: session.selected_playlist,
-      status: session.status || "completed",
-      created_at: session.created_at,
+      ...mapSessionRowToSessionData(
+        session as RunningSessionRow,
+        musicStats
+      ),
       heart_rate_data: (heartRateData || []) as HeartRateData[],
       music_history: (musicHistory || []) as MusicTrack[],
       gps_points: (gpsPoints || []) as GpsPoint[],
@@ -423,7 +457,7 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
         )
       `)
       .eq("user_id", userId)
-      .order("start_time", { ascending: false });
+      .order("session_start_time", { ascending: false });
 
     if (error) {
       console.error("❌ Error fetching user sessions:", {
@@ -492,8 +526,7 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
       stats.totalTime += (track.played_duration_seconds || 0) * 1000;
     });
 
-    const sessionsData = sessions.map((session) => {
-      const user = session.users;
+    const sessionsData = (sessions as RunningSessionRow[]).map((session) => {
       const musicStats = musicBySession.get(session.id) || {
         total: 0,
         completed: 0,
@@ -502,38 +535,10 @@ export async function getUserSessions(userId: string): Promise<SessionData[]> {
         totalTime: 0,
       };
 
-      return {
-        id: session.id,
-        session_id: session.id,
-        user_id: session.user_id,
-        user_email: user?.email || "Unknown",
-        user_name: user?.username || "Unknown User",
-        started_at: session.start_time,
-        ended_at: session.end_time,
-        duration_seconds: session.duration_seconds,
-        duration_minutes: Math.round((session.duration_seconds || 0) / 60),
-        distance_km: session.distance_meters
-          ? session.distance_meters / 1000
-          : 0,
-        total_steps: session.total_steps || 0,
-        avg_pace_min_per_km: session.avg_pace_min_per_km,
-        avg_cadence_spm: session.avg_cadence_spm || 0,
-        avg_heart_rate_bpm: session.avg_heart_rate || session.avg_heart_rate_bpm,
-        max_heart_rate_bpm: session.max_heart_rate_bpm || 0,
-        min_heart_rate_bpm: session.min_heart_rate_bpm || 0,
-        avg_speed_kmh: session.avg_speed_kmh || 0,
-        total_songs: musicStats.total,
-        completed_songs: musicStats.completed,
-        skipped_songs: musicStats.skipped,
-        liked_songs: musicStats.liked,
-        disliked_songs: 0,
-        total_time_ms: musicStats.totalTime,
-        run_type: session.run_type || "quick",
-        selected_emotion: session.selected_emotion,
-        selected_playlist: session.selected_playlist,
-        status: session.status || "completed",
-        created_at: session.created_at,
-      };
+      return mapSessionRowToSessionData(session, {
+        ...musicStats,
+        disliked: 0,
+      });
     });
 
     console.log(`✅ Found ${sessionsData.length} sessions for user`);

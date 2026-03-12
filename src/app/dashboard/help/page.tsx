@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,8 @@ import {
   Video,
   Users,
   Zap,
+  ShieldCheck,
+  Scale,
 } from "lucide-react";
 
 export default function HelpPage() {
@@ -81,14 +84,26 @@ export default function HelpPage() {
       icon: HelpCircle,
       popular: false,
     },
+    {
+      id: 7,
+      title: "Legal and Compliance Guidance",
+      category: "Legal",
+      description: "Review terms, privacy, copyright, and provider data-use rules",
+      icon: Scale,
+      popular: true,
+    },
   ];
 
-  // Quick links - TODO: Update with actual documentation URLs
   const quickLinks = [
-    { title: "Documentation", url: "#", icon: BookOpen },
-    { title: "Video Tutorials", url: "#", icon: Video },
-    { title: "API Reference", url: "#", icon: FileText },
-    { title: "Release Notes", url: "#", icon: FileText },
+    { title: "Help Center", url: "/dashboard/help", icon: BookOpen, external: false },
+    { title: "Terms of Use", url: "/dashboard/legal/terms", icon: Scale, external: false },
+    { title: "Privacy Policy", url: "/dashboard/legal/privacy", icon: ShieldCheck, external: false },
+    {
+      title: "Copyright and Data Use",
+      url: "/dashboard/legal/copyright",
+      icon: FileText,
+      external: false,
+    },
   ];
 
   // Filtered articles based on search
@@ -215,6 +230,7 @@ export default function HelpPage() {
           <TabsList>
             <TabsTrigger value="articles">Help Articles</TabsTrigger>
             <TabsTrigger value="quick-links">Quick Links</TabsTrigger>
+            <TabsTrigger value="legal">Legal & Compliance</TabsTrigger>
             <TabsTrigger value="contact">Contact Us</TabsTrigger>
           </TabsList>
 
@@ -290,11 +306,9 @@ export default function HelpPage() {
                   >
                     <Card className="hover:shadow-lg transition-shadow cursor-pointer">
                       <CardContent className="pt-6">
-                        <a
+                        <Link
                           href={link.url}
                           className="flex items-center justify-between"
-                          target="_blank"
-                          rel="noopener noreferrer"
                         >
                           <div className="flex items-center gap-3">
                             <div className="p-2 bg-primary/10 rounded-lg">
@@ -304,13 +318,91 @@ export default function HelpPage() {
                               {link.title}
                             </span>
                           </div>
-                          <ExternalLink className="h-4 w-4 text-gray-400" />
-                        </a>
+                          {link.external ? (
+                            <ExternalLink className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          )}
+                        </Link>
                       </CardContent>
                     </Card>
                   </motion.div>
                 );
               })}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="legal" className="mt-6">
+            <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Scale className="h-5 w-5 text-primary" />
+                    Legal and Compliance Documentation
+                  </CardTitle>
+                  <CardDescription>
+                    Central access point for admin-facing policy and provider-use guidance
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Link
+                    href="/dashboard/legal/terms"
+                    className="flex items-center justify-between rounded-lg border border-border p-4 hover:bg-muted/40 transition-colors"
+                  >
+                    <div>
+                      <p className="font-medium text-foreground">Terms of Use</p>
+                      <p className="text-sm text-muted-foreground">
+                        Internal admin access, acceptable use, and operational responsibilities
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </Link>
+
+                  <Link
+                    href="/dashboard/legal/privacy"
+                    className="flex items-center justify-between rounded-lg border border-border p-4 hover:bg-muted/40 transition-colors"
+                  >
+                    <div>
+                      <p className="font-medium text-foreground">Privacy Policy</p>
+                      <p className="text-sm text-muted-foreground">
+                        Coverage of user, session, listening, and analytics data handling
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </Link>
+
+                  <Link
+                    href="/dashboard/legal/copyright"
+                    className="flex items-center justify-between rounded-lg border border-border p-4 hover:bg-muted/40 transition-colors"
+                  >
+                    <div>
+                      <p className="font-medium text-foreground">Copyright and Data Use</p>
+                      <p className="text-sm text-muted-foreground">
+                        Spotify and third-party metadata usage boundaries and attribution concerns
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </Link>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-primary" />
+                    Release Checklist
+                  </CardTitle>
+                  <CardDescription>
+                    Minimum documentation checks before production rollout
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <p>Confirm legal review of Spotify, music metadata, and external dataset usage.</p>
+                  <p>Align these admin pages with your public website terms and privacy notice.</p>
+                  <p>Document retention, export, and access-control rules for user and listening data.</p>
+                  <p>Verify internal admin roles only expose data required for approved operations.</p>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 

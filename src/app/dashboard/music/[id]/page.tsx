@@ -1,14 +1,17 @@
 "use client";
 
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Clock,
+  Headphones,
+  Heart,
   MoreVertical,
   Play,
-  Heart,
+  Tags,
   TrendingUp,
   Users,
-  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,19 +33,85 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  getTrackById,
-  getListeningEventsByTrackId,
-} from "@/lib/enhanced-music-data";
+  getMusicTrackDetail,
+  type MusicTrackDetail,
+} from "@/lib/supabase/music-queries";
+import { useToast } from "@/components/ui/use-toast";
 
 interface MusicDetailPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
+}
+
+function formatDuration(ms: number) {
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatEventDuration(ms: number | null) {
+  if (!ms || ms <= 0) return "N/A";
+  return formatDuration(ms);
+}
+
+function TrackStatusBadges({
+  completed,
+  skipped,
+  liked,
+}: {
+  completed: boolean | null;
+  skipped: boolean | null;
+  liked: boolean | null;
+}) {
+  return (
+    <div className="flex gap-2">
+      {completed ? <Badge>Completed</Badge> : null}
+      {skipped ? <Badge variant="outline">Skipped</Badge> : null}
+      {liked ? <Badge variant="secondary">Liked</Badge> : null}
+    </div>
+  );
 }
 
 export default function MusicDetailPage({ params }: MusicDetailPageProps) {
+  const { id } = use(params);
   const router = useRouter();
-  const track = getTrackById(params.id);
+  const { toast } = useToast();
+  const [track, setTrack] = useState<MusicTrackDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadTrack() {
+      setLoading(true);
+
+      try {
+        const detail = await getMusicTrackDetail(id);
+        setTrack(detail);
+      } catch (error) {
+        console.error("Error loading music detail:", error);
+        toast({
+          title: "Music detail unavailable",
+          description: "Could not load this track from Supabase.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadTrack();
+  }, [id, toast]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading track...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!track) {
     return (
@@ -53,52 +122,12 @@ export default function MusicDetailPage({ params }: MusicDetailPageProps) {
           </Button>
           <h1 className="text-2xl font-bold">Track Not Found</h1>
         </div>
-        <p>The requested music track could not be found.</p>
       </div>
     );
   }
 
-  const listeningEvents = getListeningEventsByTrackId(params.id);
-
-  // Format functions
-  const formatDuration = (ms: number) => {
-    const minutes = Math.floor(ms / 60000);
-    const seconds = ((ms % 60000) / 1000).toFixed(0);
-    return `${minutes}:${seconds.padStart(2, "0")}`;
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
-  const getEnergyLabel = (level: number) => {
-    if (level >= 9) return "Very High";
-    if (level >= 7) return "High";
-    if (level >= 5) return "Medium";
-    if (level >= 3) return "Low";
-    return "Very Low";
-  };
-
-  const getMoodColor = (mood: string) => {
-    const colors: Record<string, string> = {
-      Energetic: "bg-red-500",
-      Motivated: "bg-orange-500",
-      Focused: "bg-blue-500",
-      Calm: "bg-cyan-500",
-      Uplifting: "bg-green-500",
-      Intense: "bg-red-600",
-      Chill: "bg-purple-500",
-    };
-    return colors[mood] || "bg-gray-500";
-  };
-
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -106,14 +135,10 @@ export default function MusicDetailPage({ params }: MusicDetailPageProps) {
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold">{track.track_name}</h1>
-              <Badge variant={track.is_active ? "default" : "secondary"}>
-                {track.is_active ? "Active" : "Inactive"}
-              </Badge>
+              <h1 className="text-3xl font-bold">{track.name}</h1>
+              <Badge variant="outline">{track.track_id}</Badge>
             </div>
-            <p className="text-muted-foreground mt-1">
-              {track.artist_name} {track.album_name && `• ${track.album_name}`}
-            </p>
+            <p className="text-muted-foreground mt-1">{track.artist}</p>
           </div>
         </div>
         <DropdownMenu>
@@ -123,216 +148,161 @@ export default function MusicDetailPage({ params }: MusicDetailPageProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>Edit Track</DropdownMenuItem>
             <DropdownMenuItem>View on Spotify</DropdownMenuItem>
-            <DropdownMenuItem>Download Report</DropdownMenuItem>
-            <DropdownMenuItem className="text-red-600">
-              {track.is_active ? "Deactivate" : "Activate"} Track
-            </DropdownMenuItem>
+            <DropdownMenuItem>Export Track Report</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* Track Cover & Main Info */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-6">
-            <div className="aspect-square bg-gradient-to-br from-primary/20 to-primary/5 rounded-lg flex items-center justify-center mb-4">
-              {track.cover_image_url ? (
-                <img
-                  src={track.cover_image_url}
-                  alt={track.track_name}
-                  className="w-full h-full object-cover rounded-lg"
-                />
-              ) : (
-                <Play className="h-24 w-24 text-primary opacity-50" />
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Genre</span>
-                <Badge variant="outline">{track.genre}</Badge>
-              </div>
-              {track.sub_genre && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Sub-genre
-                  </span>
-                  <Badge variant="outline">{track.sub_genre}</Badge>
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Mood</span>
-                <Badge className={getMoodColor(track.mood)}>{track.mood}</Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Energy</span>
-                <span className="text-sm font-medium">
-                  {getEnergyLabel(track.energy_level)} ({track.energy_level}/10)
-                </span>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Plays</CardTitle>
+            <Play className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{track.total_plays}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              From listening_events
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Track Statistics</CardTitle>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Listeners</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Play className="h-4 w-4" />
-                  <span className="text-sm">Total Plays</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {track.total_plays.toLocaleString()}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Users className="h-4 w-4" />
-                  <span className="text-sm">Listeners</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {track.unique_listeners.toLocaleString()}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <TrendingUp className="h-4 w-4" />
-                  <span className="text-sm">Completion</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {track.avg_completion_rate || 0}%
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Heart className="h-4 w-4" />
-                  <span className="text-sm">BPM</span>
-                </div>
-                <p className="text-2xl font-bold">{track.bpm}</p>
-              </div>
-            </div>
+            <div className="text-2xl font-bold">{track.unique_listeners}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Unique user IDs
+            </p>
+          </CardContent>
+        </Card>
 
-            <Separator className="my-4" />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Completion</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{track.completion_rate}%</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Completed listens
+            </p>
+          </CardContent>
+        </Card>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Duration</p>
-                <p className="font-medium">
-                  {formatDuration(track.duration_ms)}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
-                  Release Date
-                </p>
-                <p className="font-medium">
-                  {track.release_date ? formatDate(track.release_date) : "N/A"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
-                  Optimal Pace
-                </p>
-                <p className="font-medium">
-                  {track.optimal_pace_min && track.optimal_pace_max
-                    ? `${Math.floor(track.optimal_pace_min / 60)}:${(
-                        track.optimal_pace_min % 60
-                      )
-                        .toString()
-                        .padStart(2, "0")} - ${Math.floor(
-                        track.optimal_pace_max / 60
-                      )}:${(track.optimal_pace_max % 60)
-                        .toString()
-                        .padStart(2, "0")} /km`
-                    : "Not specified"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Added Date</p>
-                <p className="font-medium">{formatDate(track.added_at)}</p>
-              </div>
-            </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Likes</CardTitle>
+            <Heart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{track.likes}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Positive reactions
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabbed Content */}
-      <Tabs defaultValue="listening" className="w-full">
+      <Tabs defaultValue="overview" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="listening">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="events">
             <Clock className="h-4 w-4 mr-2" />
-            Listening History
+            Listening Events
           </TabsTrigger>
-          <TabsTrigger value="analytics">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Analytics
+          <TabsTrigger value="metadata">
+            <Tags className="h-4 w-4 mr-2" />
+            Metadata
           </TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="listening" className="space-y-4">
+        <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Listening Events</CardTitle>
+              <CardTitle>Track Overview</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div>
+                <p className="text-sm font-medium">Genre</p>
+                <p className="text-sm text-muted-foreground">{track.genre}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Mood</p>
+                <p className="text-sm text-muted-foreground">{track.mood}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Duration</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatDuration(track.duration_ms)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Tempo</p>
+                <p className="text-sm text-muted-foreground">
+                  {track.tempo ? `${Math.round(track.tempo)} BPM` : "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Energy</p>
+                <p className="text-sm text-muted-foreground">
+                  {typeof track.energy === "number" ? track.energy.toFixed(2) : "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Year</p>
+                <p className="text-sm text-muted-foreground">{track.year || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Spotify ID</p>
+                <p className="text-sm text-muted-foreground break-all">
+                  {track.spotify_id || "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Preview URL</p>
+                <p className="text-sm text-muted-foreground break-all">
+                  {track.spotify_preview_url || "N/A"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="events" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Listening Events</CardTitle>
             </CardHeader>
             <CardContent>
-              {listeningEvents.length > 0 ? (
+              {track.events.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Played At</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Completion</TableHead>
-                      <TableHead>Pace</TableHead>
-                      <TableHead>Heart Rate</TableHead>
+                      <TableHead>User ID</TableHead>
+                      <TableHead>Session ID</TableHead>
+                      <TableHead>Played</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {listeningEvents.map((event) => (
-                      <TableRow key={event.id}>
+                    {track.events.map((event) => (
+                      <TableRow key={event.event_key}>
+                        <TableCell>{new Date(event.ts_start).toLocaleString()}</TableCell>
+                        <TableCell className="font-mono text-xs">{event.user_id || "N/A"}</TableCell>
+                        <TableCell className="font-mono text-xs">{event.session_id || "N/A"}</TableCell>
+                        <TableCell>{formatEventDuration(event.played_ms)}</TableCell>
                         <TableCell>
-                          {new Date(event.played_at).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {event.user_id}
-                        </TableCell>
-                        <TableCell>
-                          {formatDuration(event.play_duration_ms)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
-                              <div
-                                className="bg-primary h-full"
-                                style={{
-                                  width: `${event.completion_percentage}%`,
-                                }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium">
-                              {event.completion_percentage}%
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {event.user_pace_at_play
-                            ? `${Math.floor(event.user_pace_at_play / 60)}:${(
-                                event.user_pace_at_play % 60
-                              )
-                                .toString()
-                                .padStart(2, "0")} /km`
-                            : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          {event.user_heart_rate_at_play
-                            ? `${event.user_heart_rate_at_play} bpm`
-                            : "N/A"}
+                          <TrackStatusBadges
+                            completed={event.completed}
+                            skipped={event.skipped}
+                            liked={event.liked}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -340,181 +310,34 @@ export default function MusicDetailPage({ params }: MusicDetailPageProps) {
                 </Table>
               ) : (
                 <div className="text-center py-12">
-                  <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">
-                    No listening events recorded yet
-                  </p>
+                  <Headphones className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No listening events recorded yet</p>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="analytics" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Engagement Metrics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-muted-foreground">
-                        Average Completion Rate
-                      </span>
-                      <span className="font-medium">
-                        {track.avg_completion_rate}%
-                      </span>
-                    </div>
-                    <div className="bg-muted rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-green-500 h-full"
-                        style={{ width: `${track.avg_completion_rate}%` }}
-                      />
-                    </div>
-                  </div>
-                  <Separator />
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Plays per Listener
-                      </span>
-                      <span className="font-medium">
-                        {(track.total_plays / track.unique_listeners).toFixed(
-                          2
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Skip Rate
-                      </span>
-                      <span className="font-medium">
-                        {(100 - (track.avg_completion_rate || 0)).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance Insights</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm font-medium">Popularity Rank</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      #{/* Calculate rank based on total_plays */}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm font-medium">Best For</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {track.optimal_pace_min && track.optimal_pace_max
-                        ? "Medium to fast paced runs"
-                        : "All pace levels"}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm font-medium">Recommended Time</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {track.energy_level >= 7
-                        ? "Morning/Evening high-intensity runs"
-                        : "Easy recovery runs"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="details" className="space-y-4">
+        <TabsContent value="metadata" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Track Details</CardTitle>
+              <CardTitle>Raw Music Metadata</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium">Track ID</p>
-                  <p className="text-sm text-muted-foreground font-mono">
-                    {track.id}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Spotify ID</p>
-                  <p className="text-sm text-muted-foreground font-mono">
-                    {track.spotify_id || "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Track Name</p>
-                  <p className="text-sm text-muted-foreground">
-                    {track.track_name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Artist</p>
-                  <p className="text-sm text-muted-foreground">
-                    {track.artist_name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Album</p>
-                  <p className="text-sm text-muted-foreground">
-                    {track.album_name || "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Duration</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDuration(track.duration_ms)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">BPM</p>
-                  <p className="text-sm text-muted-foreground">{track.bpm}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Energy Level</p>
-                  <p className="text-sm text-muted-foreground">
-                    {track.energy_level}/10
-                  </p>
-                </div>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm font-medium">Track ID</p>
+                <p className="text-sm text-muted-foreground font-mono">{track.track_id}</p>
               </div>
-
               <Separator />
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium">Added At</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDate(track.added_at)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Last Updated</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDate(track.updated_at)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Status</p>
-                  <p className="text-sm text-muted-foreground">
-                    {track.is_active ? "Active" : "Inactive"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Preview URL</p>
-                  <p className="text-sm text-muted-foreground">
-                    {track.preview_url ? "Available" : "N/A"}
-                  </p>
-                </div>
+              <div>
+                <p className="text-sm font-medium">Tags</p>
+                <p className="text-sm text-muted-foreground">{track.tags || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Mood / Genre</p>
+                <p className="text-sm text-muted-foreground">
+                  {track.mood} / {track.genre}
+                </p>
               </div>
             </CardContent>
           </Card>

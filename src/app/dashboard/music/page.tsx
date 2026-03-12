@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
-  getFilteredRowModel,
   useReactTable,
   type ColumnDef,
   type SortingState,
@@ -32,76 +31,131 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Upload,
+  Download,
   Search,
-  Grid3x3,
-  List,
   ArrowUpDown,
   Music,
-  Download,
-  TrendingUp,
   PlayCircle,
   BarChart3,
+  Gauge,
+  RefreshCw,
 } from "lucide-react";
-import {
-  enhancedMusicTracks,
-  enhancedGenres,
-  enhancedMoods,
-} from "@/lib/enhanced-music-data";
-import { MusicTrack } from "@/lib/types/music";
-import { MusicCard } from "@/components/dashboard/music-card";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  getMusicLibraryData,
+  type MusicLibraryTrack,
+} from "@/lib/supabase/music-queries";
+
+function formatDuration(ms: number) {
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
 
 export default function MusicPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [view, setView] = useState<"grid" | "table">("grid");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [genreFilter, setGenreFilter] = useState<string>("all");
   const [moodFilter, setMoodFilter] = useState<string>("all");
-  const [bpmFilter, setBpmFilter] = useState<string>("all");
-  const [energyFilter, setEnergyFilter] = useState<string>("all");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tracks, setTracks] = useState<MusicLibraryTrack[]>([]);
 
-  // Memoize filtered music for better performance
+  const loadMusic = useCallback(
+    async (showToast = false) => {
+      try {
+        if (tracks.length > 0) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+
+        const data = await getMusicLibraryData();
+        setTracks(data.tracks);
+
+        if (showToast) {
+          toast({
+            title: "Music refreshed",
+            description: "Music library data reloaded from Supabase.",
+          });
+        }
+      } catch (error) {
+        console.error("Error loading music library:", {
+          message:
+            error instanceof Error
+              ? error.message
+              : typeof error === "object" && error !== null && "message" in error
+              ? String((error as { message: unknown }).message)
+              : String(error),
+          error,
+        });
+        toast({
+          title: "Music library unavailable",
+          description: "Could not load music data from Supabase.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [toast, tracks.length]
+  );
+
+  useEffect(() => {
+    loadMusic();
+  }, [loadMusic]);
+
   const filteredMusic = useMemo(() => {
-    return enhancedMusicTracks.filter((track) => {
+    return tracks.filter((track) => {
       const matchesSearch =
-        track.track_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        track.artist_name.toLowerCase().includes(searchQuery.toLowerCase());
+        track.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        track.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        track.track_id.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesGenre = genreFilter === "all" || track.genre === genreFilter;
       const matchesMood = moodFilter === "all" || track.mood === moodFilter;
 
-      // BPM filter
-      let matchesBPM = true;
-      if (bpmFilter !== "all") {
-        const [min, max] = bpmFilter.split("-").map(Number);
-        if (max) {
-          matchesBPM = track.bpm >= min && track.bpm <= max;
-        } else {
-          matchesBPM = track.bpm >= min;
-        }
-      }
-
-      // Energy filter
-      let matchesEnergy = true;
-      if (energyFilter !== "all") {
-        const energyLevel = parseInt(energyFilter);
-        matchesEnergy =
-          track.energy_level >= energyLevel &&
-          track.energy_level < energyLevel + 3;
-      }
-
-      return (
-        matchesSearch &&
-        matchesGenre &&
-        matchesMood &&
-        matchesBPM &&
-        matchesEnergy
-      );
+      return matchesSearch && matchesGenre && matchesMood;
     });
-  }, [searchQuery, genreFilter, moodFilter, bpmFilter, energyFilter]);
+  }, [genreFilter, moodFilter, searchQuery, tracks]);
+
+  const genreOptions = useMemo(
+    () => [...new Set(tracks.map((track) => track.genre))].sort(),
+    [tracks]
+  );
+  const moodOptions = useMemo(
+    () => [...new Set(tracks.map((track) => track.mood))].sort(),
+    [tracks]
+  );
+
+  const stats = useMemo(() => {
+    const totalPlays = filteredMusic.reduce(
+      (sum, track) => sum + track.total_plays,
+      0
+    );
+    const avgTempo =
+      filteredMusic.filter((track) => typeof track.tempo === "number").length > 0
+        ? (
+            filteredMusic.reduce((sum, track) => sum + (track.tempo || 0), 0) /
+            filteredMusic.filter((track) => typeof track.tempo === "number")
+              .length
+          ).toFixed(1)
+        : "0.0";
+    const avgEnergy =
+      filteredMusic.filter((track) => typeof track.energy === "number").length > 0
+        ? (
+            filteredMusic.reduce((sum, track) => sum + (track.energy || 0), 0) /
+            filteredMusic.filter((track) => typeof track.energy === "number")
+              .length
+          ).toFixed(2)
+        : "0.00";
+    const totalLikes = filteredMusic.reduce((sum, track) => sum + track.likes, 0);
+
+    return { totalPlays, avgTempo, avgEnergy, totalLikes };
+  }, [filteredMusic]);
 
   const handleViewDetails = (trackId: string) => {
     router.push(`/dashboard/music/${trackId}`);
@@ -110,31 +164,34 @@ export default function MusicPage() {
   const handleExportCSV = () => {
     const headers = [
       "Track ID",
-      "Title",
+      "Name",
       "Artist",
-      "Album",
       "Genre",
       "Mood",
-      "BPM",
+      "Duration (ms)",
+      "Tempo",
       "Energy",
-      "Duration",
-      "Plays",
-      "Listeners",
+      "Year",
+      "Total Plays",
+      "Unique Listeners",
+      "Completion Rate",
+      "Likes",
     ];
+
     const rows = filteredMusic.map((track) => [
-      track.id,
-      track.track_name,
-      track.artist_name,
-      track.album_name || "N/A",
+      track.track_id,
+      track.name,
+      track.artist,
       track.genre,
       track.mood,
-      track.bpm,
-      track.energy_level,
-      Math.floor(track.duration_ms / 60000) +
-        ":" +
-        ((track.duration_ms % 60000) / 1000).toFixed(0).padStart(2, "0"),
+      track.duration_ms,
+      track.tempo ?? "",
+      track.energy ?? "",
+      track.year ?? "",
       track.total_plays,
       track.unique_listeners,
+      track.completion_rate,
+      track.likes,
     ]);
 
     const csvContent =
@@ -146,64 +203,44 @@ export default function MusicPage() {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `music_library_${new Date().toISOString()}.csv`
+      `music_library_${new Date().toISOString().split("T")[0]}.csv`
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
     toast({
-      title: "Export Successful",
-      description: `Exported ${filteredMusic.length} tracks to CSV.`,
+      title: "Export complete",
+      description: `Exported ${filteredMusic.length} tracks.`,
     });
   };
 
-  // Calculate stats - memoized for performance
-  const stats = useMemo(() => {
-    const totalPlays = filteredMusic.reduce(
-      (sum, track) => sum + track.total_plays,
-      0
-    );
-    const avgCompletionRate =
-      filteredMusic.length > 0
-        ? filteredMusic.reduce(
-            (sum, track) => sum + (track.avg_completion_rate || 0),
-            0
-          ) / filteredMusic.length
-        : 0;
-    const activeTracks = filteredMusic.filter((t) => t.is_active).length;
-
-    return { totalPlays, avgCompletionRate, activeTracks };
-  }, [filteredMusic]);
-
-  const columns: ColumnDef<MusicTrack>[] = useMemo(
-    () => [
+  const columns: ColumnDef<MusicLibraryTrack>[] = [
       {
-        accessorKey: "track_name",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
-              className="hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              Title
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-          );
-        },
+        accessorKey: "name",
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            Track
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        ),
         cell: ({ row }) => (
           <div
             className="cursor-pointer"
-            onClick={() => handleViewDetails(row.original.id)}
+            onClick={() => handleViewDetails(row.original.track_id)}
           >
             <div className="font-medium text-gray-900 dark:text-white">
-              {row.original.track_name}
+              {row.original.name}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              {row.original.artist_name}
+              {row.original.artist}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-500 font-mono">
+              {row.original.track_id}
             </div>
           </div>
         ),
@@ -211,106 +248,80 @@ export default function MusicPage() {
       {
         accessorKey: "genre",
         header: "Genre",
-        cell: ({ row }) => {
-          const genre = enhancedGenres.find(
-            (g) => g.name === row.original.genre
-          );
-          return (
-            <Badge
-              variant="secondary"
-              style={{ borderColor: genre?.color, color: genre?.color }}
-            >
-              {row.original.genre}
-            </Badge>
-          );
-        },
+        cell: ({ row }) => <Badge variant="secondary">{row.original.genre}</Badge>,
       },
       {
         accessorKey: "mood",
         header: "Mood",
-        cell: ({ row }) => {
-          const mood = enhancedMoods.find((m) => m.name === row.original.mood);
-          return (
-            <Badge variant="outline" style={{ color: mood?.color }}>
-              {row.original.mood}
-            </Badge>
-          );
-        },
+        cell: ({ row }) => <Badge variant="outline">{row.original.mood}</Badge>,
       },
       {
-        accessorKey: "bpm",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
-              className="hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              BPM
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-          );
-        },
-        cell: ({ row }) => <span>{row.original.bpm}</span>,
+        accessorKey: "tempo",
+        header: "Tempo",
+        cell: ({ row }) => (
+          <span>{row.original.tempo ? `${Math.round(row.original.tempo)} BPM` : "N/A"}</span>
+        ),
+      },
+      {
+        accessorKey: "energy",
+        header: "Energy",
+        cell: ({ row }) => (
+          <span>
+            {typeof row.original.energy === "number"
+              ? row.original.energy.toFixed(2)
+              : "N/A"}
+          </span>
+        ),
       },
       {
         accessorKey: "duration_ms",
         header: "Duration",
-        cell: ({ row }) => {
-          const ms = row.original.duration_ms;
-          const minutes = Math.floor(ms / 60000);
-          const seconds = ((ms % 60000) / 1000).toFixed(0).padStart(2, "0");
-          return (
-            <span>
-              {minutes}:{seconds}
-            </span>
-          );
-        },
+        cell: ({ row }) => <span>{formatDuration(row.original.duration_ms)}</span>,
       },
       {
         accessorKey: "total_plays",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
-              className="hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              Plays
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-          );
-        },
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            Plays
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        ),
         cell: ({ row }) => (
           <span className="font-semibold text-primary">
             {row.original.total_plays.toLocaleString()}
           </span>
         ),
       },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+    ];
 
   const table = useReactTable({
     data: filteredMusic,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
     state: {
       sorting,
     },
   });
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading music library...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
-      {/* Page Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -322,22 +333,21 @@ export default function MusicPage() {
             Music Library
           </h1>
           <p className="text-gray-700 dark:text-gray-300">
-            Manage your music collection ({filteredMusic.length} tracks)
+            Real tracks from `public.music` ({filteredMusic.length} shown)
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportCSV}>
+          <Button variant="outline" onClick={() => loadMusic(true)} disabled={refreshing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button variant="default" onClick={handleExportCSV}>
             <Download className="mr-2 h-4 w-4" />
             Export CSV
-          </Button>
-          <Button variant="default">
-            <Upload className="mr-2 h-4 w-4" />
-            Upload Music
           </Button>
         </div>
       </motion.div>
 
-      {/* Stats Cards */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -345,36 +355,35 @@ export default function MusicPage() {
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
       >
         <StatsCard
-          title="Total Tracks"
+          title="Tracks Shown"
           value={filteredMusic.length.toString()}
           icon={Music}
-          trend="up"
-          trendValue="+12%"
+          trend="neutral"
+          trendValue="From public.music"
         />
         <StatsCard
           title="Total Plays"
           value={stats.totalPlays.toLocaleString()}
           icon={PlayCircle}
-          trend="up"
-          trendValue="+8.5%"
+          trend="neutral"
+          trendValue="Derived from listening_events"
         />
         <StatsCard
-          title="Active Tracks"
-          value={stats.activeTracks.toString()}
-          icon={TrendingUp}
-          trend="up"
-          trendValue="+5%"
+          title="Avg Tempo"
+          value={`${stats.avgTempo} BPM`}
+          icon={Gauge}
+          trend="neutral"
+          trendValue="Using music.tempo"
         />
         <StatsCard
-          title="Avg Completion"
-          value={`${stats.avgCompletionRate.toFixed(1)}%`}
+          title="Total Likes"
+          value={stats.totalLikes.toLocaleString()}
           icon={BarChart3}
-          trend="up"
-          trendValue="+3.2%"
+          trend="neutral"
+          trendValue={`Avg energy ${stats.avgEnergy}`}
         />
       </motion.div>
 
-      {/* Filters & View Toggle */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -383,179 +392,103 @@ export default function MusicPage() {
         <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-col lg:flex-row gap-4">
-              {/* Search */}
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <Input
-                  placeholder="Search by title or artist..."
+                  placeholder="Search by track, artist, or track ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="pl-9"
                 />
               </div>
 
-              {/* Genre Filter */}
               <Select value={genreFilter} onValueChange={setGenreFilter}>
                 <SelectTrigger className="w-full lg:w-48">
                   <SelectValue placeholder="All Genres" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Genres</SelectItem>
-                  {enhancedGenres.map((genre) => (
-                    <SelectItem key={genre.id} value={genre.name}>
-                      {genre.name}
+                  {genreOptions.map((genre) => (
+                    <SelectItem key={genre} value={genre}>
+                      {genre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              {/* Mood Filter */}
               <Select value={moodFilter} onValueChange={setMoodFilter}>
                 <SelectTrigger className="w-full lg:w-48">
                   <SelectValue placeholder="All Moods" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Moods</SelectItem>
-                  {enhancedMoods.map((mood) => (
-                    <SelectItem key={mood.id} value={mood.name}>
-                      {mood.name}
+                  {moodOptions.map((mood) => (
+                    <SelectItem key={mood} value={mood}>
+                      {mood}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-
-              {/* BPM Filter */}
-              <Select value={bpmFilter} onValueChange={setBpmFilter}>
-                <SelectTrigger className="w-full lg:w-48">
-                  <SelectValue placeholder="All BPM" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All BPM</SelectItem>
-                  <SelectItem value="60-80">60-80 BPM (Slow)</SelectItem>
-                  <SelectItem value="80-100">80-100 BPM (Relaxed)</SelectItem>
-                  <SelectItem value="100-120">
-                    100-120 BPM (Moderate)
-                  </SelectItem>
-                  <SelectItem value="120-140">
-                    120-140 BPM (Energetic)
-                  </SelectItem>
-                  <SelectItem value="140-999">140+ BPM (Fast)</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Energy Filter */}
-              <Select value={energyFilter} onValueChange={setEnergyFilter}>
-                <SelectTrigger className="w-full lg:w-48">
-                  <SelectValue placeholder="All Energy" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Energy</SelectItem>
-                  <SelectItem value="1">Low (1-3)</SelectItem>
-                  <SelectItem value="4">Medium (4-6)</SelectItem>
-                  <SelectItem value="7">High (7-9)</SelectItem>
-                  <SelectItem value="10">Very High (10)</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* View Toggle */}
-              <div className="flex gap-2">
-                <Button
-                  variant={view === "grid" ? "default" : "outline"}
-                  size="icon"
-                  onClick={() => setView("grid")}
-                >
-                  <Grid3x3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={view === "table" ? "default" : "outline"}
-                  size="icon"
-                  onClick={() => setView("table")}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </div>
             </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      {/* Content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
+        transition={{ duration: 0.4, delay: 0.15 }}
       >
-        {view === "grid" ? (
-          /* Grid View */
-          <motion.div
-            layout
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-          >
-            {filteredMusic.map((track, idx) => (
-              <MusicCard key={track.id} track={track} index={idx} />
-            ))}
-          </motion.div>
-        ) : (
-          /* Table View */
-          <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    {table.getHeaderGroups().map((headerGroup) => (
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.length > 0 ? (
+                    table.getRowModel().rows.map((row) => (
                       <TableRow
-                        key={headerGroup.id}
-                        className="bg-gray-50 dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        key={row.id}
+                        className="cursor-pointer"
+                        onClick={() => handleViewDetails(row.original.track_id)}
                       >
-                        {headerGroup.headers.map((header) => (
-                          <TableHead
-                            key={header.id}
-                            className="text-gray-700 dark:text-gray-300 font-semibold"
-                          >
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                          </TableHead>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
                         ))}
                       </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {table.getRowModel().rows?.length ? (
-                      table.getRowModel().rows.map((row) => (
-                        <TableRow
-                          key={row.id}
-                          className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext()
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={columns.length}
-                          className="h-24 text-center text-gray-600 dark:text-gray-400"
-                        >
-                          No tracks found.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={columns.length} className="h-24 text-center">
+                        No tracks found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
     </div>
   );

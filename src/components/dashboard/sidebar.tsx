@@ -13,7 +13,6 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
-  Heart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +34,12 @@ const navItems: NavItem[] = [
   { name: "Sessions", href: "/dashboard/sessions", icon: Activity },
   { name: "Music Library", href: "/dashboard/music", icon: Music },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-  { name: "IoT Monitor", href: "/dashboard/iot-monitor", icon: Heart },
+];
+
+const legalLinks = [
+  { name: "Terms of Use", href: "/dashboard/legal/terms" },
+  { name: "Privacy Policy", href: "/dashboard/legal/privacy" },
+  { name: "Copyright and Data Use", href: "/dashboard/legal/copyright" },
 ];
 
 export function Sidebar() {
@@ -44,7 +48,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Floating Toggle Button - Above everything */}
       <Button
         variant="ghost"
         size="icon"
@@ -65,7 +68,6 @@ export function Sidebar() {
           isCollapsed ? "w-20" : "w-64"
         }`}
       >
-        {/* Logo */}
         <div className="p-6 border-b border-gray-200 dark:border-gray-800">
           <Link href="/dashboard" className="flex items-center gap-3">
             <Image
@@ -88,7 +90,6 @@ export function Sidebar() {
           </Link>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2">
           <TooltipProvider>
             {navItems.map((item, index) => {
@@ -108,9 +109,7 @@ export function Sidebar() {
                     } ${isCollapsed ? "justify-center" : ""}`}
                   >
                     <Icon className="h-5 w-5 flex-shrink-0" />
-                    {!isCollapsed && (
-                      <span className="font-medium">{item.name}</span>
-                    )}
+                    {!isCollapsed && <span className="font-medium">{item.name}</span>}
                   </motion.div>
                 </Link>
               );
@@ -131,21 +130,47 @@ export function Sidebar() {
           </TooltipProvider>
         </nav>
 
-        {/* Footer */}
         {!isCollapsed && (
           <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-            <div className="bg-blue-50 dark:bg-gray-800 border border-blue-100 dark:border-gray-700 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                Need Help?
-              </h3>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
-                Check our documentation or contact support
-              </p>
+            <div className="bg-blue-50 dark:bg-gray-800 border border-blue-100 dark:border-gray-700 rounded-lg p-4 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                  Need Help?
+                </h3>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Check documentation, policy pages, and support guidance.
+                </p>
+              </div>
+
               <Link
                 href="/dashboard/help"
-                className="text-xs text-primary hover:text-primary/80 font-medium"
+                className="block text-xs text-primary hover:text-primary/80 font-medium"
               >
-                Learn More →
+                Documentation Hub
+              </Link>
+
+              <div className="border-t border-blue-100 dark:border-gray-700 pt-3">
+                <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                  Legal
+                </p>
+                <div className="space-y-1">
+                  {legalLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="block text-xs text-primary hover:text-primary/80"
+                    >
+                      {link.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              <Link
+                href="/dashboard/help"
+                className="block text-xs text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+              >
+                Learn More
               </Link>
             </div>
           </div>

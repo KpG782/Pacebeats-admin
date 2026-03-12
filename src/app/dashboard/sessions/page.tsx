@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
-  getFilteredRowModel,
   useReactTable,
   type ColumnDef,
   type SortingState,
-  type ColumnFiltersState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -67,27 +65,11 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import { checkDatabaseStructure } from "@/lib/supabase/diagnostics";
 import {
   getAllSessions,
   deleteSession,
   SessionData,
 } from "@/lib/supabase/session-queries";
-
-// Database types for listening_events (legacy, not used)
-interface ListeningEvent {
-  id: string;
-  session_id: string;
-  user_id: string;
-  track_id: string;
-  played_ms: number | null;
-  completed: boolean | null;
-  skipped: boolean | null;
-  liked: boolean | null;
-  disliked: boolean | null;
-  ts_start: string;
-  ts_end: string | null;
-}
 
 export default function SessionsPage() {
   const router = useRouter();
@@ -96,8 +78,7 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [date, setDate] = useState<Date>();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -142,8 +123,6 @@ export default function SessionsPage() {
   }, [toast]);
 
   useEffect(() => {
-    // Run diagnostics on first load
-    checkDatabaseStructure();
     fetchSessions();
   }, [fetchSessions]);
 
@@ -162,36 +141,70 @@ export default function SessionsPage() {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  // Filter sessions based on status and date
-  const filteredData = sessions.filter((session) => {
-    // Status filter
-    if (statusFilter !== "all" && session.status !== statusFilter) {
-      return false;
-    }
+  const filteredData = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    // Date filter
-    if (date) {
-      const sessionDate = new Date(session.started_at);
-      if (
-        sessionDate.getFullYear() !== date.getFullYear() ||
-        sessionDate.getMonth() !== date.getMonth() ||
-        sessionDate.getDate() !== date.getDate()
-      ) {
+    return sessions.filter((session) => {
+      if (statusFilter !== "all" && session.status !== statusFilter) {
         return false;
       }
-    }
 
-    return true;
-  });
+      if (date) {
+        const sessionDate = new Date(session.started_at);
+        if (
+          sessionDate.getFullYear() !== date.getFullYear() ||
+          sessionDate.getMonth() !== date.getMonth() ||
+          sessionDate.getDate() !== date.getDate()
+        ) {
+          return false;
+        }
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const searchableValues = [
+        session.session_id,
+        session.user_name,
+        session.user_email,
+        session.status,
+        session.run_type,
+        session.selected_emotion || "",
+        session.selected_playlist || "",
+      ];
+
+      return searchableValues.some((value) =>
+        value.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [date, searchQuery, sessions, statusFilter]);
 
   // Calculate stats
-  const totalSessions = sessions.length;
-  const activeSessions = sessions.filter((s) => s.status === "active").length;
-  const completedSessions = sessions.filter(
+  const totalSessions = filteredData.length;
+  const completedSessions = filteredData.filter(
     (s) => s.status === "completed"
   ).length;
-  const totalSongs = sessions.reduce((sum, s) => sum + s.total_songs, 0);
-  const totalLiked = sessions.reduce((sum, s) => sum + s.liked_songs, 0);
+  const totalSongs = filteredData.reduce((sum, s) => sum + s.total_songs, 0);
+  const totalLiked = filteredData.reduce((sum, s) => sum + s.liked_songs, 0);
+  const totalDistanceKm =
+    filteredData.length > 0
+      ? (
+          filteredData.reduce(
+            (sum, session) => sum + (session.distance_km || 0),
+            0
+          )
+        ).toFixed(1)
+      : "0.0";
+  const avgDurationMinutes =
+    filteredData.length > 0
+      ? Math.round(
+          filteredData.reduce(
+            (sum, session) => sum + (session.duration_minutes || 0),
+            0
+          ) / filteredData.length
+        )
+      : 0;
 
   const handleViewDetails = (sessionId: string) => {
     router.push(`/dashboard/sessions/${sessionId}`);
@@ -359,6 +372,26 @@ export default function SessionsPage() {
       },
     },
     {
+      accessorKey: "distance_km",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            Distance
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => (
+        <span className="font-medium">
+          {(row.original.distance_km || 0).toFixed(2)} km
+        </span>
+      ),
+    },
+    {
       accessorKey: "duration_minutes",
       header: "Duration",
       cell: ({ row }) => (
@@ -366,6 +399,24 @@ export default function SessionsPage() {
           {formatDuration(row.getValue("duration_minutes"))}
         </span>
       ),
+    },
+    {
+      accessorKey: "avg_pace_min_per_km",
+      header: "Avg Pace",
+      cell: ({ row }) => {
+        const pace = row.original.avg_pace_min_per_km;
+        if (!pace || pace <= 0) {
+          return <span className="text-gray-500 dark:text-gray-400">N/A</span>;
+        }
+
+        const minutes = Math.floor(pace);
+        const seconds = Math.round((pace - minutes) * 60);
+        return (
+          <span className="font-medium">
+            {minutes}:{seconds.toString().padStart(2, "0")} /km
+          </span>
+        );
+      },
     },
     {
       accessorKey: "total_songs",
@@ -478,14 +529,9 @@ export default function SessionsPage() {
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalFilter,
     state: {
       sorting,
-      columnFilters,
-      globalFilter,
     },
   });
 
@@ -532,36 +578,23 @@ export default function SessionsPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-4 gap-4"
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
       >
         <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Sessions
+                  Sessions Shown
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   {totalSessions}
                 </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Based on current filters
+                </p>
               </div>
               <Activity className="h-8 w-8 text-primary opacity-50" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Active Now
-                </p>
-                <p className="text-2xl font-bold text-green-600">
-                  {activeSessions}
-                </p>
-              </div>
-              <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
             </div>
           </CardContent>
         </Card>
@@ -576,6 +609,9 @@ export default function SessionsPage() {
                 <p className="text-2xl font-bold text-blue-600">
                   {completedSessions}
                 </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {avgDurationMinutes} min average duration
+                </p>
               </div>
             </div>
           </CardContent>
@@ -586,10 +622,13 @@ export default function SessionsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Songs
+                  Total Distance
                 </p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {totalSongs}
+                  {totalDistanceKm} km
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Summed from real session rows
                 </p>
               </div>
             </div>
@@ -601,9 +640,12 @@ export default function SessionsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Liked Songs
+                  Tracks Played
                 </p>
-                <p className="text-2xl font-bold text-pink-600">{totalLiked}</p>
+                <p className="text-2xl font-bold text-pink-600">{totalSongs}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {totalLiked} liked across shown sessions
+                </p>
               </div>
             </div>
           </CardContent>
@@ -621,8 +663,8 @@ export default function SessionsPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder="Search by user name, email, or session ID..."
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
           />
         </div>
@@ -635,6 +677,8 @@ export default function SessionsPage() {
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="paused">Paused</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
         <Popover>
@@ -653,6 +697,11 @@ export default function SessionsPage() {
             />
           </PopoverContent>
         </Popover>
+        {date ? (
+          <Button variant="ghost" onClick={() => setDate(undefined)}>
+            Clear Date
+          </Button>
+        ) : null}
       </motion.div>
 
       {/* Data Table */}

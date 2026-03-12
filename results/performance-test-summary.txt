@@ -1,0 +1,18 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║         WEB PERFORMANCE TEST — RESULTS SUMMARY              ║
+╠══════════════════════════════════════════════════════════════╣
+║  Concurrent Users       : 25 (target: 20–30)                ║
+║  Test Duration          : 7 minutes                         ║
+╠══════════════════════════════════════════════════════════════╣
+║  RESPONSE TIME                                              ║
+║    Average              : 0 ms                            ║
+║    p95                  : 0 ms (target: < 2000 ms) ✓ PASS ║
+║  LATENCY (TTFB)                                             ║
+║    Average              : 0 ms                            ║
+║    p95                  : 0 ms (target: < 500 ms) ✓ PASS  ║
+║  ERROR RATE             : 100.00% (target: < 2%) ✗ FAIL   ║
+║  THROUGHPUT             : 26.76 req/s                     ║
+╠══════════════════════════════════════════════════════════════╣
+║  OVERALL RESULT         : ✗ FAIL                          ║
+╚══════════════════════════════════════════════════════════════╝

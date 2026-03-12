@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { use, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +17,7 @@ import {
   Ban,
   Trash2,
   MoreHorizontal,
+  UserCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -43,136 +45,206 @@ import { format } from "date-fns";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/components/ui/use-toast";
 
-// Database types
-interface DatabaseUser {
+interface UserRow {
   id: string;
   email: string;
   username: string | null;
-  role: "user" | "admin" | "moderator";
-  profile_picture_url: string | null;
-  location: string | null;
-  phone_number: string | null;
-  date_of_birth: string | null;
-  spotify_connected: boolean;
+  role: string | null;
+  avatar_url: string | null;
+  created_at: string | null;
+  age: number | null;
+  gender: string | null;
+  provider: string | null;
   spotify_user_id: string | null;
-  total_runs: number;
-  total_distance_km: number;
-  total_duration_minutes: number;
-  created_at: string;
-  updated_at: string;
+  survey_completed: boolean | null;
+  run_frequency: string | null;
+  pace_band: string | null;
+  preferred_genres: string[] | null;
+  pump_up_genres: string[] | null;
 }
 
 interface RunningSession {
   id: string;
   user_id: string;
-  start_time: string;
-  end_time: string | null;
-  distance_meters: number | null;
-  duration_seconds: number | null;
+  session_start_time: string;
+  session_end_time: string | null;
+  session_duration_seconds: number | null;
+  total_distance_km: number | null;
+  total_steps: number | null;
   avg_pace_min_per_km: number | null;
-  avg_heart_rate: number | null;
-  max_heart_rate: number | null;
+  avg_heart_rate_bpm: number | null;
   calories_burned: number | null;
-  status: "active" | "paused" | "completed" | "cancelled";
-  created_at: string;
+  status: string | null;
+  run_type: string | null;
+  selected_emotion: string | null;
+  selected_playlist: string | null;
+  created_at: string | null;
 }
 
-export default function UserDetailPage({ params }: { params: { id: string } }) {
+interface UserDetailPageProps {
+  params: Promise<{
+    id: string;
+  }>;
+}
+
+function formatDuration(seconds: number | null) {
+  if (!seconds || seconds <= 0) return "0:00";
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
+}
+
+function formatPace(minutesPerKm: number | null) {
+  if (!minutesPerKm || minutesPerKm <= 0) return "N/A";
+
+  const wholeMinutes = Math.floor(minutesPerKm);
+  const seconds = Math.round((minutesPerKm - wholeMinutes) * 60);
+  return `${wholeMinutes}:${seconds.toString().padStart(2, "0")} /km`;
+}
+
+function isLikelyUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+export default function UserDetailPage({ params }: UserDetailPageProps) {
+  const { id } = use(params);
   const router = useRouter();
   const { toast } = useToast();
 
-  const [user, setUser] = useState<DatabaseUser | null>(null);
+  const [user, setUser] = useState<UserRow | null>(null);
   const [sessions, setSessions] = useState<RunningSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    fetchUserData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id]);
+    async function fetchUserData() {
+      try {
+        setLoading(true);
+        setNotFound(false);
 
-  const fetchUserData = async () => {
-    try {
-      setLoading(true);
-      console.log(`🔍 Fetching user data for ID: ${params.id}`);
+        if (!id) {
+          setNotFound(true);
+          return;
+        }
 
-      // Check if it's a mock user
-      if (params.id.startsWith("mock-")) {
-        console.log("📦 Mock user detected");
+        if (id.startsWith("mock-")) {
+          toast({
+            title: "Mock User",
+            description: "This is sample data. Real user details are not available.",
+          });
+          setNotFound(true);
+          return;
+        }
+
+        if (!isLikelyUuid(id)) {
+          toast({
+            title: "Invalid user ID",
+            description: "The user ID format is not valid.",
+            variant: "destructive",
+          });
+          setNotFound(true);
+          return;
+        }
+
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select(
+            "id, email, username, role, avatar_url, created_at, age, gender, provider, spotify_user_id, survey_completed, run_frequency, pace_band, preferred_genres, pump_up_genres"
+          )
+          .eq("id", id)
+          .single();
+
+        if (userError || !userData) {
+          console.error("Error fetching user:", {
+            message: userError?.message,
+            details: userError?.details,
+            hint: userError?.hint,
+            code: userError?.code,
+          });
+          setNotFound(true);
+          return;
+        }
+
+        setUser(userData as UserRow);
+
+        const { data: sessionsData, error: sessionsError } = await supabase
+          .from("running_sessions")
+          .select(
+            "id, user_id, session_start_time, session_end_time, session_duration_seconds, total_distance_km, total_steps, avg_pace_min_per_km, avg_heart_rate_bpm, calories_burned, status, run_type, selected_emotion, selected_playlist, created_at"
+          )
+          .eq("user_id", id)
+          .order("session_start_time", { ascending: false })
+          .limit(20);
+
+        if (sessionsError) {
+          console.error("Error fetching sessions:", {
+            message: sessionsError.message,
+            details: sessionsError.details,
+            hint: sessionsError.hint,
+            code: sessionsError.code,
+          });
+          setSessions([]);
+        } else {
+          setSessions((sessionsData || []) as RunningSession[]);
+        }
+      } catch (error) {
+        console.error("Unexpected error fetching user data:", {
+          message:
+            error instanceof Error
+              ? error.message
+              : typeof error === "object" && error !== null && "message" in error
+              ? String((error as { message: unknown }).message)
+              : String(error),
+          error,
+        });
         toast({
-          title: "Mock User",
-          description: "This is sample data. Real user details not available.",
+          title: "Error",
+          description: "Failed to load user data.",
+          variant: "destructive",
         });
         setNotFound(true);
-        return;
+      } finally {
+        setLoading(false);
       }
-
-      // Fetch user details
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", params.id)
-        .single();
-
-      if (userError || !userData) {
-        console.error("❌ Error fetching user:", userError);
-        setNotFound(true);
-        return;
-      }
-
-      console.log("✅ User data loaded:", userData.username || userData.email);
-      setUser(userData);
-
-      // Fetch user's running sessions
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from("running_sessions")
-        .select("*")
-        .eq("user_id", params.id)
-        .order("start_time", { ascending: false })
-        .limit(20);
-
-      if (sessionsError) {
-        console.error("⚠️ Error fetching sessions:", sessionsError);
-        // Don't fail if sessions error, just show empty
-        setSessions([]);
-      } else {
-        console.log(`✅ Loaded ${sessionsData?.length || 0} sessions`);
-        setSessions(sessionsData || []);
-      }
-    } catch (error) {
-      console.error("❌ Unexpected error fetching user data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load user data",
-        variant: "destructive",
-      });
-      setNotFound(true);
-    } finally {
-      setLoading(false);
     }
-  };
 
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return "0:00";
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes}:${secs.toString().padStart(2, "0")}`;
-  };
+    fetchUserData();
+  }, [id, toast]);
 
-  const calculateAge = (dateOfBirth: string | null) => {
-    if (!dateOfBirth) return null;
-    const today = new Date();
-    const birthDate = new Date(dateOfBirth);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birthDate.getDate())
-    ) {
-      age--;
-    }
-    return age;
-  };
+  const stats = useMemo(() => {
+    const totalRuns = sessions.length;
+    const totalDistance = sessions.reduce(
+      (sum, session) => sum + Number(session.total_distance_km || 0),
+      0
+    );
+    const totalDurationMinutes = Math.round(
+      sessions.reduce(
+        (sum, session) => sum + Number(session.session_duration_seconds || 0),
+        0
+      ) / 60
+    );
+    const avgHeartRateSessions = sessions.filter(
+      (session) => typeof session.avg_heart_rate_bpm === "number"
+    );
+    const avgHeartRate =
+      avgHeartRateSessions.length > 0
+        ? Math.round(
+            avgHeartRateSessions.reduce(
+              (sum, session) => sum + Number(session.avg_heart_rate_bpm || 0),
+              0
+            ) / avgHeartRateSessions.length
+          )
+        : null;
+
+    return {
+      totalRuns,
+      totalDistance: totalDistance.toFixed(2),
+      totalDurationMinutes,
+      avgHeartRate,
+    };
+  }, [sessions]);
 
   if (loading) {
     return (
@@ -195,7 +267,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             User Not Found
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            The user you&apos;re looking for doesn&apos;t exist.
+            The user you&apos;re looking for doesn&apos;t exist or cannot be loaded.
           </p>
           <Button onClick={() => router.push("/dashboard/users")}>
             Back to Users
@@ -205,11 +277,8 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const age = calculateAge(user.date_of_birth);
-
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -230,7 +299,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               User Profile
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              View and manage user details
+              View profile details and recent running sessions
             </p>
           </div>
         </div>
@@ -261,7 +330,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         </DropdownMenu>
       </motion.div>
 
-      {/* User Profile Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -270,14 +338,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/20">
           <CardContent className="p-6">
             <div className="flex flex-col md:flex-row gap-6">
-              {/* Avatar */}
               <div className="flex-shrink-0">
                 <Avatar className="h-32 w-32 border-4 border-white dark:border-gray-800 shadow-lg">
-                  {user.profile_picture_url ? (
-                    <img
-                      src={user.profile_picture_url}
-                      alt={user.username || user.email}
-                    />
+                  {user.avatar_url ? (
+                    <img src={user.avatar_url} alt={user.username || user.email} />
                   ) : (
                     <div className="h-full w-full bg-primary flex items-center justify-center text-white text-4xl font-bold">
                       {(user.username || user.email).charAt(0).toUpperCase()}
@@ -286,7 +350,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 </Avatar>
               </div>
 
-              {/* User Info */}
               <div className="flex-1 space-y-4">
                 <div>
                   <div className="flex items-center gap-3 mb-2">
@@ -294,7 +357,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                       {user.username || user.email.split("@")[0]}
                     </h2>
                     <Badge className="bg-green-100 text-green-900 border border-green-300 font-semibold dark:bg-green-900/30 dark:text-green-400 dark:border-green-700">
-                      {user.role}
+                      {user.role || "user"}
                     </Badge>
                   </div>
                   <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
@@ -304,46 +367,56 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                     </div>
                     <div className="flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
-                      Joined {format(new Date(user.created_at), "MMM dd, yyyy")}
+                      Joined{" "}
+                      {user.created_at
+                        ? format(new Date(user.created_at), "MMM dd, yyyy")
+                        : "Unknown"}
                     </div>
-                    {user.location && (
+                    {user.provider && (
                       <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {user.location}
+                        <UserCircle2 className="h-4 w-4" />
+                        {user.provider}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Profile Details */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  {age && (
+                  {typeof user.age === "number" && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                         Age
                       </p>
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {age} years
+                        {user.age} years
                       </p>
                     </div>
                   )}
-                  {user.phone_number && (
+                  {user.gender && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        Phone
+                        Gender
                       </p>
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {user.phone_number}
+                        {user.gender}
                       </p>
                     </div>
                   )}
-                  {user.spotify_connected && (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                      Spotify
+                    </p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {user.spotify_user_id ? "Connected" : "Not connected"}
+                    </p>
+                  </div>
+                  {user.run_frequency && (
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        Spotify
+                        Run Frequency
                       </p>
-                      <p className="text-lg font-semibold text-green-600 dark:text-green-400">
-                        Connected
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {user.run_frequency}
                       </p>
                     </div>
                   )}
@@ -354,7 +427,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         </Card>
       </motion.div>
 
-      {/* Stats Grid */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -365,11 +437,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Runs
-                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Runs</p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                  {user.total_runs}
+                  {stats.totalRuns}
                 </p>
               </div>
               <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
@@ -387,7 +457,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   Total Distance
                 </p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                  {user.total_distance_km} km
+                  {stats.totalDistance} km
                 </p>
               </div>
               <div className="h-12 w-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -405,8 +475,8 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   Total Duration
                 </p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                  {Math.floor(user.total_duration_minutes / 60)}h{" "}
-                  {user.total_duration_minutes % 60}m
+                  {Math.floor(stats.totalDurationMinutes / 60)}h{" "}
+                  {stats.totalDurationMinutes % 60}m
                 </p>
               </div>
               <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
@@ -421,10 +491,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Sessions
+                  Avg Heart Rate
                 </p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                  {sessions.length}
+                  {stats.avgHeartRate ? `${stats.avgHeartRate} bpm` : "N/A"}
                 </p>
               </div>
               <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
@@ -435,7 +505,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         </Card>
       </motion.div>
 
-      {/* Tabs */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -448,11 +517,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             </TabsTrigger>
           </TabsList>
 
-          {/* Sessions Tab */}
           <TabsContent value="sessions">
             <Card>
               <CardHeader>
-                <CardTitle>Running Sessions</CardTitle>
+                <CardTitle>Recent Running Sessions</CardTitle>
               </CardHeader>
               <CardContent>
                 {sessions.length > 0 ? (
@@ -472,34 +540,20 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                       {sessions.map((session) => (
                         <TableRow key={session.id}>
                           <TableCell>
-                            {format(
-                              new Date(session.start_time),
-                              "MMM dd, yyyy"
-                            )}
+                            {format(new Date(session.session_start_time), "MMM dd, yyyy")}
                           </TableCell>
                           <TableCell>
-                            {formatDuration(session.duration_seconds)}
+                            {formatDuration(session.session_duration_seconds)}
                           </TableCell>
                           <TableCell>
-                            {session.distance_meters
-                              ? (session.distance_meters / 1000).toFixed(2)
-                              : "0.00"}{" "}
-                            km
+                            {Number(session.total_distance_km || 0).toFixed(2)} km
                           </TableCell>
+                          <TableCell>{formatPace(session.avg_pace_min_per_km)}</TableCell>
                           <TableCell>
-                            {session.avg_pace_min_per_km
-                              ? `${Math.floor(
-                                  session.avg_pace_min_per_km / 60
-                                )}:${(session.avg_pace_min_per_km % 60)
-                                  .toString()
-                                  .padStart(2, "0")} /km`
-                              : "N/A"}
-                          </TableCell>
-                          <TableCell>
-                            {session.avg_heart_rate ? (
+                            {session.avg_heart_rate_bpm ? (
                               <div className="flex items-center gap-1">
                                 <Heart className="h-4 w-4 text-red-500" />
-                                {session.avg_heart_rate} bpm
+                                {session.avg_heart_rate_bpm} bpm
                               </div>
                             ) : (
                               "N/A"
@@ -523,7 +577,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                                   : "bg-blue-100 text-blue-900 border border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700"
                               }
                             >
-                              {session.status}
+                              {session.status || "completed"}
                             </Badge>
                           </TableCell>
                         </TableRow>

@@ -26,7 +26,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -265,6 +271,9 @@ export function Header() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Dashboard navigation</SheetTitle>
+              </SheetHeader>
               <div className="p-6 border-b border-gray-200 dark:border-gray-800">
                 <Link href="/dashboard" className="flex items-center gap-3">
                   <Image

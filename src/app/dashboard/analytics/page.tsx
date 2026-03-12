@@ -1,7 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
+import {
+  Activity,
+  Clock,
+  Download,
+  Music,
+  RefreshCw,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { StatsCard } from "@/components/dashboard/stats-card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -10,126 +39,231 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Download,
-  TrendingUp,
-  TrendingDown,
-  Users,
-  Music,
-  Activity,
-  Clock,
-} from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Line,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell,
-  ComposedChart,
-} from "recharts";
-import {
-  enhancedAnalyticsData,
-  getTopGenres,
-  getRecommendationTrend,
-} from "@/lib/enhanced-analytics-data";
 import { useToast } from "@/components/ui/use-toast";
-import { StatsCard } from "@/components/dashboard/stats-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getAnalyticsData,
+  type AnalyticsData,
+  type AnalyticsRange,
+} from "@/lib/supabase/analytics-queries";
 
 const COLORS = [
-  "oklch(0.55 0.18 250)", // Pacebeats Blue
-  "oklch(0.65 0.15 200)", // Light Blue
-  "oklch(0.70 0.12 180)", // Cyan
-  "oklch(0.60 0.16 220)", // Medium Blue
-  "oklch(0.50 0.20 260)", // Deep Blue
-  "oklch(0.75 0.10 200)", // Very Light Blue
-  "oklch(0.58 0.17 240)", // Mid Blue
-  "oklch(0.52 0.19 255)", // Deep Blue 2
+  "oklch(0.55 0.18 250)",
+  "oklch(0.65 0.15 200)",
+  "oklch(0.70 0.12 180)",
+  "oklch(0.60 0.16 220)",
+  "oklch(0.50 0.20 260)",
+  "oklch(0.75 0.10 200)",
 ];
 
-export default function AnalyticsPage() {
-  const [dateRange, setDateRange] = useState("month");
-  const [activeTab, setActiveTab] = useState("overview");
-  const { toast } = useToast();
+function ChartCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
+      <CardHeader>
+        <CardTitle className="text-gray-900 dark:text-white">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
 
-  const {
-    dashboardStats,
-    songPopularity,
-    genreDistribution,
-    moodDistribution,
-    bpmDistribution,
-    userActivityTrend,
-    sessionMetrics,
-    musicEngagement,
-    recommendationAccuracy,
-    peakUsageHours,
-  } = enhancedAnalyticsData;
+function EmptyChart({ message }: { message: string }) {
+  return (
+    <div className="h-[320px] flex items-center justify-center text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+export default function AnalyticsPage() {
+  const { toast } = useToast();
+  const [dateRange, setDateRange] = useState<AnalyticsRange>("month");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadAnalytics = useCallback(
+    async (showToast = false) => {
+      try {
+        if (analytics) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+
+        const data = await getAnalyticsData(dateRange);
+        setAnalytics(data);
+
+        if (showToast) {
+          toast({
+            title: "Analytics refreshed",
+            description: "Dashboard metrics reloaded from Supabase.",
+          });
+        }
+      } catch (error) {
+        console.error("Error loading analytics:", {
+          message:
+            error instanceof Error
+              ? error.message
+              : typeof error === "object" && error !== null && "message" in error
+              ? String((error as { message: unknown }).message)
+              : String(error),
+          error,
+        });
+        toast({
+          title: "Analytics unavailable",
+          description: "Could not load analytics data from Supabase.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [analytics, dateRange, toast]
+  );
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
+
+  const completionTrendDelta = useMemo(() => {
+    if (!analytics || analytics.completionTrend.length < 2) return 0;
+    const latest = analytics.completionTrend[analytics.completionTrend.length - 1];
+    const previous = analytics.completionTrend[analytics.completionTrend.length - 2];
+    return latest.completionRate - previous.completionRate;
+  }, [analytics]);
+
+  const topGenres = useMemo(
+    () => (analytics ? analytics.genreDistribution.slice(0, 3) : []),
+    [analytics]
+  );
 
   const handleExportData = () => {
-    toast({
-      title: "Export Started",
-      description: "Analytics data is being exported to CSV...",
-    });
+    if (!analytics) return;
 
-    // Mock export logic
-    setTimeout(() => {
-      toast({
-        title: "Export Complete",
-        description: "Analytics report has been downloaded successfully.",
-      });
-    }, 1500);
+    const rows = [
+      ["Metric", "Value"],
+      ["Total Users", analytics.stats.totalUsers],
+      ["Active Users", analytics.stats.activeUsers],
+      ["Total Sessions", analytics.stats.totalSessions],
+      ["Total Plays", analytics.stats.totalPlays],
+      ["Avg Session Minutes", analytics.stats.avgSessionDurationMinutes],
+      ["User Retention Rate", analytics.stats.userRetentionRate],
+      ["Avg Tracks Per Session", analytics.stats.avgTracksPerSession],
+      ["Avg Completion Rate", analytics.stats.avgCompletionRate],
+    ];
+
+    const content =
+      "data:text/csv;charset=utf-8," +
+      rows.map((row) => row.join(",")).join("\n");
+    const encodedUri = encodeURI(content);
+    const link = document.createElement("a");
+    link.href = encodedUri;
+    link.download = `analytics_${dateRange}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Export complete",
+      description: "Analytics summary downloaded as CSV.",
+    });
   };
 
-  const recommendationTrend = getRecommendationTrend();
+  if (loading && !analytics) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-72" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-32 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-[440px] w-full" />
+      </div>
+    );
+  }
+
+  const data = analytics;
+
+  if (!data) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="py-12 text-center space-y-4">
+            <p className="text-muted-foreground">
+              Analytics data could not be loaded.
+            </p>
+            <Button onClick={() => loadAnalytics(true)}>Retry</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
-      {/* Page Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Analytics Dashboard
           </h1>
           <p className="text-gray-700 dark:text-gray-300">
-            Insights into your music platform performance
+            Real usage, music, and session analytics from Supabase
           </p>
         </div>
-        <div className="flex gap-2">
-          <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-48">
+        <div className="flex flex-wrap gap-2">
+          <Select
+            value={dateRange}
+            onValueChange={(value) => setDateRange(value as AnalyticsRange)}
+          >
+            <SelectTrigger className="w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="week">This Week</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-              <SelectItem value="year">This Year</SelectItem>
-              <SelectItem value="custom">Custom Range</SelectItem>
+              <SelectItem value="week">Last 7 Days</SelectItem>
+              <SelectItem value="month">Last 30 Days</SelectItem>
+              <SelectItem value="year">Last 12 Months</SelectItem>
+              <SelectItem value="custom">Last 30 Days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="default" onClick={handleExportData}>
+          <Button
+            variant="outline"
+            onClick={() => loadAnalytics(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
+          <Button onClick={handleExportData}>
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
         </div>
       </motion.div>
 
-      {/* Stats Cards */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -137,36 +271,31 @@ export default function AnalyticsPage() {
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
       >
         <StatsCard
-          title="Total Users"
-          value={dashboardStats.totalUsers.toString()}
+          title="Active Users"
+          value={data.stats.activeUsers.toLocaleString()}
+          subtitle="Users with sessions or plays in this range"
           icon={Users}
-          trend="up"
-          trendValue="+12.5%"
         />
         <StatsCard
           title="Total Sessions"
-          value={dashboardStats.totalSessions.toLocaleString()}
+          value={data.stats.totalSessions.toLocaleString()}
+          subtitle={`${data.stats.avgSessionDurationMinutes} min average`}
           icon={Activity}
-          trend="up"
-          trendValue="+8.2%"
         />
         <StatsCard
           title="Total Plays"
-          value={dashboardStats.totalPlays.toLocaleString()}
+          value={data.stats.totalPlays.toLocaleString()}
+          subtitle={`${data.stats.avgCompletionRate}% completion`}
           icon={Music}
-          trend="up"
-          trendValue="+15.3%"
         />
         <StatsCard
           title="Avg Session"
-          value={`${Math.round(dashboardStats.avgSessionDuration / 60)}m`}
+          value={`${data.stats.avgSessionDurationMinutes}m`}
+          subtitle={`${data.stats.avgTracksPerSession} tracks per session`}
           icon={Clock}
-          trend="up"
-          trendValue="+5.1%"
         />
       </motion.div>
 
-      {/* Tabs for Different Views */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -175,621 +304,252 @@ export default function AnalyticsPage() {
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
         </TabsList>
 
-        {/* OVERVIEW TAB */}
         <TabsContent value="overview" className="space-y-6">
-          {/* Top Songs */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Top 10 Most Popular Songs
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={songPopularity}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                      angle={-45}
-                      textAnchor="end"
-                      height={100}
-                    />
-                    <YAxis
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        color: "hsl(var(--foreground))",
-                      }}
-                    />
-                    <Bar
-                      dataKey="plays"
-                      fill="oklch(0.55 0.18 250)"
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <ChartCard title="Top 10 Most Played Songs">
+            {data.topSongs.length > 0 ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={data.topSongs}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="name" angle={-35} textAnchor="end" height={90} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="plays" fill={COLORS[0]} radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="No listening events found for this range." />
+            )}
+          </ChartCard>
 
-          {/* Genre & Mood Distribution */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-            >
-              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-gray-900 dark:text-white">
-                    Genre Distribution
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={genreDistribution as never[]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, value }) => `${name} (${value})`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {genreDistribution.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={entry.color || COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </motion.div>
+            <ChartCard title="Genre Distribution">
+              {data.genreDistribution.length > 0 ? (
+                <ResponsiveContainer width="100%" height={320}>
+                  <PieChart>
+                    <Pie
+                      data={data.genreDistribution as never[]}
+                      cx="50%"
+                      cy="45%"
+                      outerRadius={110}
+                      innerRadius={55}
+                      dataKey="value"
+                      labelLine={false}
+                    >
+                      {data.genreDistribution.map((entry, index) => (
+                        <Cell key={entry.name} fill={entry.color || COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number, name: string) => [value, name]} />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      formatter={(value) => (
+                        <span className="text-xs text-muted-foreground">{value}</span>
+                      )}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChart message="No genre data found." />
+              )}
+            </ChartCard>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-            >
-              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-gray-900 dark:text-white">
-                    Mood Distribution
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={moodDistribution as never[]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, value }) => `${name} (${value})`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {moodDistribution.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={entry.color || COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </motion.div>
+            <ChartCard title="Mood Distribution">
+              {data.moodDistribution.length > 0 ? (
+                <ResponsiveContainer width="100%" height={320}>
+                  <PieChart>
+                    <Pie
+                      data={data.moodDistribution as never[]}
+                      cx="50%"
+                      cy="45%"
+                      outerRadius={110}
+                      innerRadius={55}
+                      dataKey="value"
+                      labelLine={false}
+                    >
+                      {data.moodDistribution.map((entry, index) => (
+                        <Cell key={entry.name} fill={entry.color || COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number, name: string) => [value, name]} />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      formatter={(value) => (
+                        <span className="text-xs text-muted-foreground">{value}</span>
+                      )}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChart message="No mood data found." />
+              )}
+            </ChartCard>
           </div>
 
-          {/* Recommendation Accuracy */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.4 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-gray-900 dark:text-white">
-                    Recommendation Accuracy Over Time
-                  </CardTitle>
-                  <div
-                    className={`flex items-center gap-2 ${
-                      recommendationTrend >= 0
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {recommendationTrend >= 0 ? (
-                      <TrendingUp className="h-5 w-5" />
-                    ) : (
-                      <TrendingDown className="h-5 w-5" />
-                    )}
-                    <span className="text-sm font-semibold">
-                      {recommendationTrend >= 0 ? "+" : ""}
-                      {recommendationTrend.toFixed(1)}% this year
-                    </span>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <AreaChart data={recommendationAccuracy}>
-                    <defs>
-                      <linearGradient
-                        id="colorAccuracy"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="oklch(0.55 0.18 250)"
-                          stopOpacity={0.8}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="oklch(0.55 0.18 250)"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                      domain={[70, 100]}
-                      label={{
-                        value: "Accuracy (%)",
-                        angle: -90,
-                        position: "insideLeft",
-                        fill: "currentColor",
-                        className: "fill-gray-600 dark:fill-gray-400",
-                      }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(value) => [`${value}%`, "Accuracy"]}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="accuracy"
-                      stroke="oklch(0.55 0.18 250)"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorAccuracy)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <ChartCard title="Completion Rate Over Time">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-sm text-muted-foreground">
+                Based on `listening_events.completed`
+              </div>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <TrendingUp className="h-4 w-4" />
+                <span>{completionTrendDelta >= 0 ? "+" : ""}{completionTrendDelta.toFixed(1)} pts</span>
+              </div>
+            </div>
+            {data.completionTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <AreaChart data={data.completionTrend}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="completionRate"
+                    stroke={COLORS[0]}
+                    fill={COLORS[1]}
+                    fillOpacity={0.35}
+                    name="Completion Rate"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="likedRate"
+                    stroke={COLORS[2]}
+                    strokeWidth={2}
+                    name="Like Rate"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="No completion data found." />
+            )}
+          </ChartCard>
         </TabsContent>
 
-        {/* MUSIC TAB */}
         <TabsContent value="music" className="space-y-6">
-          {/* BPM Distribution */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  BPM Distribution & Popularity
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={bpmDistribution}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="range"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar
-                      yAxisId="left"
-                      dataKey="count"
-                      fill="oklch(0.55 0.18 250)"
-                      name="Track Count"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="avgPlays"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="Avg Plays"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 5 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <ChartCard title="BPM Distribution and Average Plays">
+            {data.bpmDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <ComposedChart data={data.bpmDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="range" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="count" fill={COLORS[0]} name="Track Count" radius={[8, 8, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="avgPlays" stroke={COLORS[2]} strokeWidth={3} name="Avg Plays" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="No BPM data found." />
+            )}
+          </ChartCard>
 
-          {/* Music Engagement */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Music Engagement Trends
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={musicEngagement}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="plays"
-                      fill="oklch(0.55 0.18 250)"
-                      fillOpacity={0.6}
-                      stroke="oklch(0.55 0.18 250)"
-                      name="Total Plays"
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="avgCompletionRate"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="Completion Rate (%)"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 4 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <ChartCard title="Music Engagement Trends">
+            {data.musicEngagement.length > 0 ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <ComposedChart data={data.musicEngagement}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="label" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
+                  <Tooltip />
+                  <Legend />
+                  <Area yAxisId="left" type="monotone" dataKey="plays" fill={COLORS[1]} fillOpacity={0.4} stroke={COLORS[0]} name="Total Plays" />
+                  <Line yAxisId="right" type="monotone" dataKey="avgCompletionRate" stroke={COLORS[2]} strokeWidth={3} name="Completion Rate (%)" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="No engagement data found." />
+            )}
+          </ChartCard>
 
-          {/* Top Genres Stats */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Top Performing Genres
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {getTopGenres().map((genre, index) => (
-                    <div
-                      key={genre.name}
-                      className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          {genre.name}
-                        </h3>
-                        <Badge style={{ backgroundColor: genre.color }}>
-                          #{index + 1}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                        Tracks: {genre.tracks}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Avg Plays: {genre.avgPlays.toLocaleString()}
-                      </p>
+          <ChartCard title="Top Performing Genres">
+            {topGenres.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {topGenres.map((genre, index) => (
+                  <div
+                    key={genre.name}
+                    className="rounded-lg border border-gray-200 dark:border-gray-700 p-4"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-gray-900 dark:text-white">
+                        {genre.name}
+                      </h3>
+                      <Badge style={{ backgroundColor: genre.color }}>#{index + 1}</Badge>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+                    <p className="text-sm text-muted-foreground">Tracks: {genre.tracks}</p>
+                    <p className="text-sm text-muted-foreground">Total plays: {genre.value}</p>
+                    <p className="text-sm text-muted-foreground">Avg plays: {genre.avgPlays}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyChart message="No genre performance data found." />
+            )}
+          </ChartCard>
         </TabsContent>
 
-        {/* USERS TAB */}
         <TabsContent value="users" className="space-y-6">
-          {/* User Activity Trend */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  User Activity Trend (Last 30 Days)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={userActivityTrend}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                      tickFormatter={(date) =>
-                        new Date(date).getDate().toString()
-                      }
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="activeUsers"
-                      fill="oklch(0.55 0.18 250)"
-                      fillOpacity={0.6}
-                      stroke="oklch(0.55 0.18 250)"
-                      name="Active Users"
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="newUsers"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="New Users"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 4 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <ChartCard title="User Activity Trend">
+            {data.userActivityTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <ComposedChart data={data.userActivityTrend}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="label" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip />
+                  <Legend />
+                  <Area yAxisId="left" type="monotone" dataKey="activeUsers" fill={COLORS[1]} fillOpacity={0.4} stroke={COLORS[0]} name="Active Users" />
+                  <Line yAxisId="right" type="monotone" dataKey="newUsers" stroke={COLORS[2]} strokeWidth={3} name="New Users" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="No user activity data found." />
+            )}
+          </ChartCard>
 
-          {/* Peak Usage Hours */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Peak Usage Hours
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={peakUsageHours}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="hour"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar
-                      dataKey="sessions"
-                      fill="oklch(0.55 0.18 250)"
-                      name="Sessions"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="users"
-                      fill="oklch(0.70 0.12 180)"
-                      name="Active Users"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <ChartCard title="Peak Usage Hours">
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={data.peakUsageHours}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis dataKey="hour" interval={1} angle={-45} textAnchor="end" height={80} />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="sessions" fill={COLORS[0]} name="Sessions" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="users" fill={COLORS[2]} name="Users" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
         </TabsContent>
 
-        {/* SESSIONS TAB */}
         <TabsContent value="sessions" className="space-y-6">
-          {/* Session Metrics */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Session Metrics Over Time
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={sessionMetrics}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="currentColor"
-                      className="stroke-gray-200 dark:stroke-gray-700"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fill: "currentColor" }}
-                      className="fill-gray-600 dark:fill-gray-400"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar
-                      yAxisId="left"
-                      dataKey="totalSessions"
-                      fill="oklch(0.55 0.18 250)"
-                      name="Total Sessions"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="avgDuration"
-                      stroke="oklch(0.70 0.12 180)"
-                      strokeWidth={3}
-                      name="Avg Duration (s)"
-                      dot={{ fill: "oklch(0.70 0.12 180)", r: 4 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <ChartCard title="Session Metrics Over Time">
+            {data.sessionMetrics.length > 0 ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <ComposedChart data={data.sessionMetrics}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="label" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="totalSessions" fill={COLORS[0]} name="Total Sessions" radius={[8, 8, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="avgDuration" stroke={COLORS[2]} strokeWidth={3} name="Avg Duration (sec)" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="No session data found." />
+            )}
+          </ChartCard>
         </TabsContent>
       </Tabs>
 
-      {/* Summary Stats */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -798,41 +558,33 @@ export default function AnalyticsPage() {
       >
         <Card className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0">
           <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">Avg. Session Length</p>
-            <p className="text-3xl font-bold">
-              {Math.round(dashboardStats.avgSessionDuration / 60)} min
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 8% from last month</p>
+            <p className="text-sm opacity-90 mb-2">Avg Session Length</p>
+            <p className="text-3xl font-bold">{data.stats.avgSessionDurationMinutes} min</p>
+            <p className="text-xs opacity-80 mt-2">From running_sessions.session_duration_seconds</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-[oklch(0.65_0.15_200)] to-[oklch(0.60_0.16_220)] text-white border-0">
           <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">User Retention</p>
-            <p className="text-3xl font-bold">
-              {dashboardStats.userRetentionRate.toFixed(1)}%
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 3% from last month</p>
+            <p className="text-sm opacity-90 mb-2">Active Users</p>
+            <p className="text-3xl font-bold">{data.stats.activeUsers}</p>
+            <p className="text-xs opacity-80 mt-2">Users with sessions or plays in range</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-[oklch(0.70_0.12_180)] to-[oklch(0.65_0.15_200)] text-white border-0">
           <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">Avg. Songs per Session</p>
-            <p className="text-3xl font-bold">
-              {dashboardStats.avgSongsPerSession.toFixed(1)}
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 5% from last month</p>
+            <p className="text-sm opacity-90 mb-2">Avg Tracks per Session</p>
+            <p className="text-3xl font-bold">{data.stats.avgTracksPerSession}</p>
+            <p className="text-xs opacity-80 mt-2">From listening_events grouped by session</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-[oklch(0.60_0.16_220)] to-[oklch(0.55_0.18_250)] text-white border-0">
           <CardContent className="p-6">
-            <p className="text-sm opacity-90 mb-2">User Satisfaction</p>
-            <p className="text-3xl font-bold">
-              {dashboardStats.userSatisfaction.toFixed(1)}/5
-            </p>
-            <p className="text-xs opacity-75 mt-2">↑ 0.2 from last month</p>
+            <p className="text-sm opacity-90 mb-2">Completion Rate</p>
+            <p className="text-3xl font-bold">{data.stats.avgCompletionRate}%</p>
+            <p className="text-xs opacity-80 mt-2">From listening_events.completed</p>
           </CardContent>
         </Card>
       </motion.div>
